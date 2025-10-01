@@ -6,22 +6,14 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
-<<<<<<< HEAD
-from server import models, database
-=======
 import database
->>>>>>> bf4c56320f757b6b8bf8010df1b9067d2e71a9a6
 import os
 
 app = FastAPI(title="Multiverse Gamer API")
 
-<<<<<<< HEAD
-# 👇 Crear tablas al iniciar (reemplaza database.init_db())
-models.Base.metadata.create_all(bind=database.engine)
-=======
-# Inicializar base de datos
-database.init_db()
->>>>>>> bf4c56320f757b6b8bf8010df1b9067d2e71a9a6
+# Crear tablas al iniciar
+from server import models, database as db_module
+models.Base.metadata.create_all(bind=db_module.engine)
 
 # Configuración
 SECRET_KEY = os.getenv("SECRET_KEY", "multiverse_secret_2025")
@@ -33,10 +25,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-class PaymentRequest(BaseModel):
-    email: str
-    plan: str
 
 def get_db():
     db = database.SessionLocal()
@@ -102,7 +90,6 @@ def get_all_users(current_user: database.User = Depends(get_current_user), db: S
     users = db.query(database.User).all()
     return [{"email": u.email, "is_admin": u.is_admin} for u in users]
 
-# 👇 Función auxiliar para get_current_user
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
