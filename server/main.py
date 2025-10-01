@@ -49,7 +49,7 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def get_user(db: Session, email: str):
-    return db.query(database.User).filter(database.User.email == email).first()
+    return db.query(models.User).filter(models.User.email == email).first()
 
 def authenticate_user(db: Session, email: str, password: str):
     user = get_user(db, email)
@@ -57,7 +57,7 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
-def create_access_token( dict):
+def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
@@ -93,12 +93,12 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     if get_user(db, email):
         raise HTTPException(status_code=400, detail="Email ya registrado")
     hashed = get_password_hash(password)
-    new_user = database.User(email=email, hashed_password=hashed, is_admin=(email == "rodrigoaguirre196@gmail.com"))
+    new_user = models.User(email=email, hashed_password=hashed, is_admin=(email == "rodrigoaguirre196@gmail.com"))
     db.add(new_user)
     db.commit()
     return {"msg": "Usuario creado"}
 
-@app.post("/token", response_model=Token)
+@app.post("/token")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -122,12 +122,12 @@ def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
     user = get_user(db, email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    new_license = database.License(
+    new_license = models.License(
         user_id=user.id,
         machine_id="web",
         plan=plan,
         valid_until=datetime.now(timezone.utc) + timedelta(days=30),
-        is_active=True
+    is_active=True
     )
     db.add(new_license)
     db.commit()
