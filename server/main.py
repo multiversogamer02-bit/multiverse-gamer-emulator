@@ -45,8 +45,8 @@ def get_db():
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-def get_password_hash(password):
-    return pwd_context.hash(password)
+def get_password_hash(password: str):
+    return pwd_context.hash(password[:72])
 
 def get_user(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
