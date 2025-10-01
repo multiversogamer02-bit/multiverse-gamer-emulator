@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
-import database
 import os
+from server import models, database as db_module
 
 app = FastAPI(title="Multiverse Gamer API")
 
