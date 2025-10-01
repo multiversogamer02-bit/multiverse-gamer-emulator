@@ -46,7 +46,10 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str):
-    return pwd_context.hash(password[:72])
+    # Trunca a 72 bytes (no caracteres) para cumplir con el límite de bcrypt
+    password_bytes = password.encode('utf-8')[:72]
+    password_truncated = password_bytes.decode('utf-8', errors='ignore')
+    return pwd_context.hash(password_truncated)
 
 def get_user(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
