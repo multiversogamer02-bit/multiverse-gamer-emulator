@@ -1,0 +1,10 @@
+# Archivos generados
+database/multiverse.db
+license.dat
+__pycache__/
+*.pyc
+*.log
+
+# Emuladores y BIOS (¡nunca subir a GitHub!)
+emulators/
+bios/
