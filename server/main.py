@@ -68,7 +68,7 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     return {"msg": "Usuario creado"}
 
 @app.post("/token", response_model=Token)
-def login(form_ OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
