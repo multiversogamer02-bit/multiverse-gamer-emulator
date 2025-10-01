@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from server import models, database as db_module  # ← Importación correcta
+from server import models, database as db_module
 import os
 
 app = FastAPI(title="Multiverse Gamer API")
@@ -107,11 +107,11 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/validate-license")
-def validate_license(machine_id: str, current_user: database.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    license = db.query(database.License).filter(
-        database.License.machine_id == machine_id,
-        database.License.user_id == current_user.id,
-        database.License.is_active == True
+def validate_license(machine_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    license = db.query(models.License).filter(
+        models.License.machine_id == machine_id,
+        models.License.user_id == current_user.id,
+        models.License.is_active == True
     ).first()
     if not license or datetime.now(timezone.utc) > license.valid_until:
         raise HTTPException(status_code=403, detail="Licencia inválida")
