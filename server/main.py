@@ -6,13 +6,13 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
-import database
+from server import models, database as db_module  # ← Importación correcta
 import os
 
 app = FastAPI(title="Multiverse Gamer API")
 
-# Inicializar base de datos
-database.init_db()
+# 👇 Crear tablas al iniciar (reemplaza database.init_db())
+models.Base.metadata.create_all(bind=db_module.engine)
 
 # Configuración de seguridad
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_para_desarrollo")

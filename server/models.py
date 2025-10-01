@@ -1,6 +1,6 @@
 # server/models.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from server.database import Base  # ← Correcto
+from server.database import Base  # ← Importación correcta
 from datetime import datetime
 
 class User(Base):
