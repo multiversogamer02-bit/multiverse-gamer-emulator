@@ -1,0 +1,30 @@
+# utils/license_manager.py
+import os
+import uuid
+import hashlib
+import json
+from pathlib import Path
+
+LICENSE_FILE = "license.dat"
+
+def get_machine_id():
+    """Genera un ID único de máquina (no es 100% seguro, pero suficiente para offline)."""
+    # Combina MAC address y nombre de máquina
+    mac = hex(uuid.getnode()).replace('0x', '').upper()
+    hostname = os.environ.get('COMPUTERNAME', os.environ.get('HOSTNAME', 'unknown'))
+    return hashlib.sha256((mac + hostname).encode()).hexdigest()
+
+def save_license(expiry_days=30):
+    """Guarda una licencia temporal (offline)."""
+    machine_id = get_machine_id()
+    license_data = {
+        "machine_id": machine_id,
+        "valid_until": expiry_days  # días desde ahora
+    }
+    with open(LICENSE_FILE, "w") as f:
+        json.dump(license_data, f)
+
+# utils/license_manager.py
+def is_license_valid():
+    """Versión dummy: siempre válida (sin licencias)."""
+    return True
