@@ -4,10 +4,10 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from pydantic import BaseModel
 from server import models, database  # ← Importación correcta
 import os
+import bcrypt
 
 app = FastAPI(title="Multiverse Gamer API")
 
@@ -19,7 +19,6 @@ SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_para_desarrollo")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Modelos
 class Token(BaseModel):
@@ -42,14 +41,19 @@ def get_db():
         db.close()
 
 # Funciones de autenticación
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # bcrypt.checkpw requiere bytes
+    return bcrypt.checkpw(
+        plain_password.encode('utf-8'),
+        hashed_password.encode('utf-8')
+    )
 
-def get_password_hash(password: str):
-    # Trunca a 72 bytes (no caracteres) para cumplir con el límite de bcrypt
+def get_password_hash(password: str) -> str:
+    # Trunca a 72 bytes para evitar el límite de bcrypt
     password_bytes = password.encode('utf-8')[:72]
-    password_truncated = password_bytes.decode('utf-8', errors='ignore')
-    return pwd_context.hash(password_truncated)
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 def get_user(db: Session, email: str):
     return db.query(models.User).filter(models.User.email == email).first()
