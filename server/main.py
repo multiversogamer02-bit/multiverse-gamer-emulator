@@ -6,7 +6,8 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from server import models, database as db_module
+from server import models
+import server.database as database  # ← Importación corregida
 import os
 
 app = FastAPI(title="Multiverse Gamer API")
@@ -160,10 +161,10 @@ def paypal_payment(payment: PaymentRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error en PayPal: {str(e)}")
 
 @app.get("/admin/users")
-def get_all_users(current_user: database.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_all_users(current_user: database.User = Depends(get_current_user), db: Session = Depends(get_db)):  # ← Ahora funciona
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Acceso denegado")
-    users = db.query(database.User).all()
+    users = db.query(database.User).all()  # ← También aquí
     return [{
         "email": u.email,
         "created_at": u.created_at.isoformat() if u.created_at else None,
