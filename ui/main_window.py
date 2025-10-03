@@ -16,7 +16,7 @@ import sqlite3
 import os
 
 class MultiverseMainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user_token=None):
         super().__init__()
         self.setWindowTitle("Multiverse Gamer Emulador")
         self.resize(1200, 800)
@@ -24,7 +24,8 @@ class MultiverseMainWindow(QMainWindow):
         self.is_big_picture = False
         self.current_theme = "Oscuro"
         self.selected_game_id = None
-        
+        self.user_token = user_token  # ← Ahora acepta el token sin error
+
         # Validación de licencia (solo offline)
         if not is_license_valid():
             print("⚠️ Licencia no válida, pero continuando en modo prueba.")
@@ -36,6 +37,22 @@ class MultiverseMainWindow(QMainWindow):
         self.load_games()
         self.gamepad = GamepadManager()
         self.gamepad.start()
+
+        # 👇 Validación ONLINE (opcional, pero ahora segura)
+        if self.user_token:
+            import requests
+            try:
+                response = requests.post(
+                    "https://multiverse-server.onrender.com/validate-license",
+                    headers={"Authorization": f"Bearer {self.user_token}"},
+                    json={"machine_id": "desktop-local"}
+                )
+                if response.status_code == 200:
+                    print("✅ Licencia online válida.")
+                else:
+                    print("❌ Licencia online inválida o expirada.")
+            except Exception as e:
+                print(f"⚠️ Error al conectar con el servidor: {e}")
 
     def init_ui(self):
         menubar = self.menuBar()

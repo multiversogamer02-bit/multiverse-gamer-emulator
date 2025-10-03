@@ -1,6 +1,6 @@
 # server/models.py
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
-from server.database import Base  # ← Importación correcta
+from .database import Base  # ← Importación relativa
 from datetime import datetime
 
 class User(Base):
@@ -19,3 +19,13 @@ class License(Base):
     plan = Column(String)
     valid_until = Column(DateTime)
     is_active = Column(Boolean, default=True)
+    
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    plan_id = Column(String)  # "mensual", "trimestral", "anual"
+    status = Column(String)   # "active", "cancelled", "expired"
+    start_date = Column(DateTime)
+    end_date = Column(DateTime)
+    payment_id = Column(String)  # ID del pago en Mercado Pago/PayPal
