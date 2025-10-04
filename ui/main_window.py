@@ -37,7 +37,9 @@ class MultiverseMainWindow(QMainWindow):
                 "no_games": "No se encontraron juegos.\nConfigura las rutas en 'Configuración'.",
                 "play": "Jugar",
                 "favorites": "Favoritos",
-                "graphics": "Gráficos"
+                "graphics": "Gráficos",
+                "hardware": "Hardware",
+                "view_hardware": "Ver hardware"
             },
             "en": {
                 "app_title": "Multiverse Gamer Emulator",
@@ -54,7 +56,9 @@ class MultiverseMainWindow(QMainWindow):
                 "no_games": "No games found.\nConfigure paths in 'Configuration'.",
                 "play": "Play",
                 "favorites": "Favorites",
-                "graphics": "Graphics"
+                "graphics": "Graphics",
+                "hardware": "Hardware",
+                "view_hardware": "View Hardware"
             }
         }
         self.setWindowTitle(self.translations[self.lang]["app_title"])
@@ -119,6 +123,11 @@ class MultiverseMainWindow(QMainWindow):
         stats_action = QAction(self.tr("stats"), self)
         stats_action.triggered.connect(self.open_stats)
         stats_menu.addAction(stats_action)
+
+        hardware_menu = menubar.addMenu(self.tr("hardware"))
+        hardware_action = QAction(self.tr("view_hardware"), self)
+        hardware_action.triggered.connect(self.show_hardware_info)
+        hardware_menu.addAction(hardware_action)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -308,16 +317,9 @@ class MultiverseMainWindow(QMainWindow):
         from core.emulator_manager import launch_game
         success = launch_game(game_id)
         if success:
-            self.start_fps_counter()
+            QTimer.singleShot(2000, self.fps_overlay.toggle)
         else:
             QMessageBox.warning(self, "Error", "No se pudo iniciar el juego.\nVerifica las rutas en Configuración.")
-
-    def start_fps_counter(self):
-        """Simula el conteo de FPS."""
-        self.fps_timer = QTimer()
-        self.fps_timer.timeout.connect(self.fps_overlay.count_frame)
-        self.fps_timer.start(16)
-        QTimer.singleShot(2000, self.fps_overlay.toggle)
 
     def open_settings(self):
         from ui.settings_window import SettingsWindow
@@ -341,6 +343,17 @@ class MultiverseMainWindow(QMainWindow):
         from ui.stats_window import StatsWindow
         stats = StatsWindow(self, lang=self.lang)
         stats.exec_()
+
+    def show_hardware_info(self):
+        from utils.hardware_detector import get_hardware_info
+        info = get_hardware_info()
+        message = f"""
+        <b>Sistema:</b> {info['os']}<br>
+        <b>CPU:</b> {info['cpu']}<br>
+        <b>GPU:</b> {info['gpu']}<br>
+        <b>RAM:</b> {info['ram_total_gb']} GB
+        """
+        QMessageBox.information(self, "💻 Información de Hardware", message)
 
     def open_graphics_settings(self, game_id):
         import sqlite3
