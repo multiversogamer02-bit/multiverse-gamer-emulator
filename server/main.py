@@ -8,24 +8,21 @@ from pydantic import BaseModel
 from server import models, database
 import os
 import bcrypt
-import httpx
-import hashlib
-import hmac
+import secrets
 
 app = FastAPI(title="Multiverse Gamer API")
 
-# Crear tablas al iniciar
 models.Base.metadata.create_all(bind=database.engine)
 
-# Configuración de seguridad
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_para_desarrollo")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 30  # Para "Mantener sesión"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# Modelos
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
 
 class TokenData(BaseModel):
@@ -33,9 +30,11 @@ class TokenData(BaseModel):
 
 class PaymentRequest(BaseModel):
     email: str
-    plan: str  # "mensual", "trimestral", "anual"
+    plan: str
 
-# Dependencias
+class PasswordResetRequest(BaseModel):
+    email: str
+
 def get_db():
     db = database.SessionLocal()
     try:
@@ -43,7 +42,6 @@ def get_db():
     finally:
         db.close()
 
-# Funciones de autenticación
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(
         plain_password.encode('utf-8'),
@@ -71,6 +69,12 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+def create_refresh_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire, "type": "refresh"})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -90,7 +94,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
-# Endpoints
 @app.get("/")
 def read_root():
     return {"message": "Multiverse Gamer API - Funcionando"}
@@ -111,7 +114,61 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(data={"sub": user.email})
+    return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
+
+@app.post("/token/refresh")
+def refresh_token(refresh_token: str = Form(...), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Token inválido")
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=401, detail="Token inválido")
+        user = get_user(db, email)
+        if not user:
+            raise HTTPException(status_code=401, detail="Usuario no encontrado")
+        new_access_token = create_access_token(data={"sub": email})
+        return {"access_token": new_access_token, "token_type": "bearer"}
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Token expirado o inválido")
+
+@app.post("/auth/forgot-password")
+def forgot_password(email: str = Form(...), db: Session = Depends(get_db)):
+    user = get_user(db, email)
+    if not user:
+        # No revelar si el email existe
+        return {"msg": "Si el email es válido, recibirás un enlace."}
+    
+    # Generar token único
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    
+    # Guardar en base de datos (agrega tabla password_reset_tokens en models.py)
+    reset_token = models.PasswordResetToken(email=email, token=token, expires_at=expires_at)
+    db.add(reset_token)
+    db.commit()
+    
+    # Aquí deberías enviar un email (pendiente de implementar con SendGrid)
+    print(f"DEBUG: Token de restablecimiento para {email}: {token}")
+    return {"msg": "Email enviado."}
+
+@app.post("/auth/reset-password")
+def reset_password(token: str = Form(...), new_password: str = Form(...), db: Session = Depends(get_db)):
+    reset_token = db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.token == token,
+        models.PasswordResetToken.expires_at > datetime.now(timezone.utc)
+    ).first()
+    if not reset_token:
+        raise HTTPException(status_code=400, detail="Token inválido o expirado")
+    
+    user = get_user(db, reset_token.email)
+    if user:
+        user.hashed_password = get_password_hash(new_password)
+        db.delete(reset_token)
+        db.commit()
+    return {"msg": "Contraseña actualizada."}
 
 @app.post("/validate-license")
 def validate_license(machine_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -176,145 +233,3 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "created_at": u.created_at.isoformat() if u.created_at else None,
         "is_admin": u.is_admin
     } for u in users]
-
-# === WEBHOOKS ===
-
-@app.post("/webhooks/mercadopago")
-async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
-    # Validar firma
-    signature = request.headers.get("x-signature")
-    if not signature:
-        raise HTTPException(status_code=400, detail="Firma ausente")
-    
-    try:
-        data = await request.body()
-        data_str = data.decode("utf-8")
-        sig_parts = dict(part.split("=") for part in signature.split(","))
-        ts = sig_parts.get("ts")
-        v1 = sig_parts.get("v1")
-        
-        if not ts or not v1:
-            raise HTTPException(status_code=400, detail="Firma mal formada")
-        
-        message = f"{ts}{data_str}"
-        secret = os.getenv("MERCADOPAGO_WEBHOOK_SECRET")
-        if not secret:
-            raise HTTPException(status_code=500, detail="Falta MERCADOPAGO_WEBHOOK_SECRET")
-        
-        hmac_hash = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(hmac_hash, v1):
-            raise HTTPException(status_code=403, detail="Firma inválida")
-            
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error validando firma: {str(e)}")
-    
-    # Procesar evento
-    try:
-        payload = await request.json()
-        data_id = payload.get("data", {}).get("id")
-        if not data_id:
-            raise HTTPException(status_code=400, detail="Payload inválido")
-        
-        mp_access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
-        if not mp_access_token:
-            raise HTTPException(status_code=500, detail="Falta MERCADOPAGO_ACCESS_TOKEN")
-        
-        async with httpx.AsyncClient() as client:
-            payment_resp = await client.get(
-                f"https://api.mercadopago.com/v1/payments/{data_id}",
-                headers={"Authorization": f"Bearer {mp_access_token}"}
-            )
-        
-        if payment_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="No se pudo obtener el pago")
-        
-        payment_data = payment_resp.json()
-        if payment_data.get("status") == "approved":
-            email = payment_data.get("payer", {}).get("email")
-            if email:
-                user = get_user(db, email)
-                if user:
-                    new_license = models.License(
-                        user_id=user.id,
-                        machine_id="web",
-                        plan="mensual",
-                        valid_until=datetime.now(timezone.utc) + timedelta(days=30),
-                        is_active=True
-                    )
-                    db.add(new_license)
-                    db.commit()
-                    return {"status": "licencia_activada"}
-        
-        return {"status": "evento_procesado"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando webhook: {str(e)}")
-
-@app.post("/webhooks/paypal")
-async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
-    try:
-        data = await request.body()
-        headers = dict(request.headers)
-        
-        client_id = os.getenv("PAYPAL_CLIENT_ID")
-        client_secret = os.getenv("PAYPAL_CLIENT_SECRET")
-        if not client_id or not client_secret:
-            raise HTTPException(status_code=500, detail="Faltan credenciales de PayPal")
-        
-        async with httpx.AsyncClient() as client:
-            auth_resp = await client.post(
-                "https://api.paypal.com/v1/oauth2/token",
-                auth=(client_id, client_secret),
-                data={"grant_type": "client_credentials"},
-                headers={"Accept": "application/json"}
-            )
-            if auth_resp.status_code != 200:
-                raise HTTPException(status_code=500, detail="Error autenticando en PayPal")
-            
-            access_token = auth_resp.json().get("access_token")
-            verify_resp = await client.post(
-                "https://api.paypal.com/v1/notifications/verify-webhook-signature",
-                json={
-                    "auth_algo": headers.get("paypal-auth-algo"),
-                    "cert_url": headers.get("paypal-cert-url"),
-                    "transmission_id": headers.get("paypal-transmission-id"),
-                    "transmission_sig": headers.get("paypal-transmission-sig"),
-                    "transmission_time": headers.get("paypal-transmission-time"),
-                    "webhook_id": os.getenv("PAYPAL_WEBHOOK_ID", ""),
-                    "webhook_event": await request.json()
-                },
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json"
-                }
-            )
-        
-        verification = verify_resp.json()
-        if verification.get("verification_status") != "SUCCESS":
-            raise HTTPException(status_code=403, detail="Firma de PayPal inválida")
-            
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error validando firma de PayPal: {str(e)}")
-    
-    try:
-        payload = await request.json()
-        if payload.get("event_type") == "PAYMENT.SALE.COMPLETED":
-            # Asumimos que guardaste el email en custom_id al crear el pago
-            email = payload.get("resource", {}).get("custom_id")
-            if email:
-                user = get_user(db, email)
-                if user:
-                    new_license = models.License(
-                        user_id=user.id,
-                        machine_id="web",
-                        plan="mensual",
-                        valid_until=datetime.now(timezone.utc) + timedelta(days=30),
-                        is_active=True
-                    )
-                    db.add(new_license)
-                    db.commit()
-                    return {"status": "licencia_activada"}
-        return {"status": "evento_procesado"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error procesando webhook de PayPal: {str(e)}")
