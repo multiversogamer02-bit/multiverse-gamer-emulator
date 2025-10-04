@@ -25,10 +25,18 @@ def init_database():
         console_id INTEGER,
         cover_path TEXT,
         is_favorite BOOLEAN DEFAULT 0,
+        graphics_profile TEXT DEFAULT '{}',
         FOREIGN KEY(console_id) REFERENCES consoles(id)
     )""")
 
-    # Insertar consolas base
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS game_stats (
+        game_id INTEGER PRIMARY KEY,
+        play_count INTEGER DEFAULT 0,
+        total_time INTEGER DEFAULT 0,
+        last_played TIMESTAMP
+    )""")
+
     consoles = [
         ("PS1", "", ""),
         ("PS2", "", ""),
@@ -39,7 +47,10 @@ def init_database():
         ("Switch", "", ""),
         ("NES", "", "")
     ]
-    cursor.executemany("INSERT OR IGNORE INTO consoles (name, emulator_path, roms_path) VALUES (?, ?, ?)", consoles)
+    cursor.executemany(
+        "INSERT OR IGNORE INTO consoles (name, emulator_path, roms_path) VALUES (?, ?, ?)",
+        consoles
+    )
 
     conn.commit()
     conn.close()

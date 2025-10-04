@@ -26,3 +26,10 @@ class PasswordResetToken(Base):
     email = Column(String, index=True)
     token = Column(String, unique=True)
     expires_at = Column(DateTime)
+    
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    id = Column(Integer, primary_key=True)
+    email = Column(String, index=True)
+    token = Column(String, unique=True)
+    expires_at = Column(DateTime)

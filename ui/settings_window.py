@@ -4,26 +4,62 @@ from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QFileDialog, QMessageBox, QComboBox
 )
 from PyQt5.QtCore import Qt
-from ui.theme_manager import THEMES  # ← Importamos los temas
+from ui.theme_manager import THEMES
 import sqlite3
 import os
 
 class SettingsWindow(QDialog):
-    def __init__(self, parent=None, current_theme="Oscuro"):
+    def __init__(self, parent=None, current_theme="Oscuro", current_lang="es"):
         super().__init__(parent)
-        self.setWindowTitle("Configuración de Emuladores")
+        self.current_lang = current_lang
+        self.translations = {
+            "es": {
+                "window_title": "Configuración de Emuladores",
+                "theme_label": "Tema visual:",
+                "trial_btn": "Activar Licencia de Prueba (30 días)",
+                "roms_label": "Carpeta de ROMs:",
+                "emulator_label": "Emulador:",
+                "browse_btn": "Examinar...",
+                "save_btn": "Guardar Configuración",
+                "success_save": "Configuración guardada correctamente.",
+                "error_save": "No se pudo guardar:\n{error}",
+                "success_trial": "Licencia de prueba activada por 30 días.",
+                "error_trial": "No se pudo activar la licencia:\n{error}",
+                "roms_not_exist": "La carpeta de ROMs no existe: {path}",
+                "emulator_not_exist": "El emulador no existe: {path}"
+            },
+            "en": {
+                "window_title": "Emulator Settings",
+                "theme_label": "Visual Theme:",
+                "trial_btn": "Activate Trial License (30 days)",
+                "roms_label": "ROMs Folder:",
+                "emulator_label": "Emulator:",
+                "browse_btn": "Browse...",
+                "save_btn": "Save Configuration",
+                "success_save": "Configuration saved successfully.",
+                "error_save": "Could not save:\n{error}",
+                "success_trial": "Trial license activated for 30 days.",
+                "error_trial": "Could not activate license:\n{error}",
+                "roms_not_exist": "ROMs folder does not exist: {path}",
+                "emulator_not_exist": "Emulator does not exist: {path}"
+            }
+        }
+        self.setWindowTitle(self.tr("window_title"))
         self.resize(800, 600)
         self.current_theme = current_theme
-        self.selected_theme = current_theme  # Para devolver el valor al guardar
+        self.selected_theme = current_theme
+        self.selected_lang = current_lang
         self.init_ui()
         self.load_settings()
+
+    def tr(self, key):
+        return self.translations[self.current_lang].get(key, key)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
 
-        # 👇 Selector de tema (arriba de todo)
         theme_layout = QGridLayout()
-        theme_layout.addWidget(QLabel("<b>Tema visual:</b>"), 0, 0)
+        theme_layout.addWidget(QLabel(f"<b>{self.tr('theme_label')}</b>"), 0, 0)
         self.theme_combo = QComboBox()
         self.theme_combo.addItems(THEMES.keys())
         self.theme_combo.setCurrentText(self.current_theme)
@@ -31,17 +67,22 @@ class SettingsWindow(QDialog):
         theme_layout.addWidget(self.theme_combo, 0, 1, 1, 2)
         layout.addLayout(theme_layout)
 
-        # 👇 Botón de licencia de prueba
-        license_btn = QPushButton("Activar Licencia de Prueba (30 días)")
+        lang_layout = QGridLayout()
+        lang_layout.addWidget(QLabel("<b>Idioma / Language:</b>"), 0, 0)
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItems(["Español", "English"])
+        self.lang_combo.setCurrentIndex(0 if self.current_lang == "es" else 1)
+        lang_layout.addWidget(self.lang_combo, 0, 1, 1, 2)
+        layout.addLayout(lang_layout)
+
+        license_btn = QPushButton(self.tr("trial_btn"))
         license_btn.clicked.connect(self.activate_trial)
         layout.addWidget(license_btn)
 
-        # Separador
         sep = QLabel()
         sep.setFixedHeight(20)
         layout.addWidget(sep)
 
-        # Área desplazable para consolas
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
@@ -49,8 +90,7 @@ class SettingsWindow(QDialog):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
-        # Botón guardar
-        self.save_btn = QPushButton("Guardar Configuración")
+        self.save_btn = QPushButton(self.tr("save_btn"))
         self.save_btn.clicked.connect(self.save_settings)
         layout.addWidget(self.save_btn)
 
@@ -73,20 +113,20 @@ class SettingsWindow(QDialog):
             self.grid.addWidget(label, row, 0, 1, 3)
             row += 1
 
-            self.grid.addWidget(QLabel("Carpeta de ROMs:"), row, 0)
+            self.grid.addWidget(QLabel(self.tr("roms_label")), row, 0)
             roms_edit = QLineEdit()
             roms_edit.setText(roms_path or "")
             self.grid.addWidget(roms_edit, row, 1)
-            roms_btn = QPushButton("Examinar...")
+            roms_btn = QPushButton(self.tr("browse_btn"))
             roms_btn.clicked.connect(lambda _, e=roms_edit: self.select_folder(e))
             self.grid.addWidget(roms_btn, row, 2)
             row += 1
 
-            self.grid.addWidget(QLabel("Emulador:"), row, 0)
+            self.grid.addWidget(QLabel(self.tr("emulator_label")), row, 0)
             emulator_edit = QLineEdit()
             emulator_edit.setText(emulator_path or "")
             self.grid.addWidget(emulator_edit, row, 1)
-            emulator_btn = QPushButton("Examinar...")
+            emulator_btn = QPushButton(self.tr("browse_btn"))
             emulator_btn.clicked.connect(lambda _, e=emulator_edit: self.select_emulator(e))
             self.grid.addWidget(emulator_btn, row, 2)
             row += 1
@@ -124,9 +164,9 @@ class SettingsWindow(QDialog):
                 emulator_path = fields["emulator"].text().strip()
 
                 if roms_path and not os.path.exists(roms_path):
-                    raise ValueError(f"La carpeta de ROMs no existe: {roms_path}")
+                    raise ValueError(self.tr("roms_not_exist").format(path=roms_path))
                 if emulator_path and not os.path.exists(emulator_path):
-                    raise ValueError(f"El emulador no existe: {emulator_path}")
+                    raise ValueError(self.tr("emulator_not_exist").format(path=emulator_path))
 
                 cursor.execute("""
                     UPDATE consoles 
@@ -135,19 +175,19 @@ class SettingsWindow(QDialog):
                 """, (roms_path, emulator_path, console_id))
 
             conn.commit()
-            QMessageBox.information(self, "Éxito", "Configuración guardada correctamente.")
+            QMessageBox.information(self, "Éxito", self.tr("success_save"))
+            self.selected_lang = "es" if self.lang_combo.currentIndex() == 0 else "en"
             self.accept()
         except Exception as e:
             conn.rollback()
-            QMessageBox.critical(self, "Error", f"No se pudo guardar:\n{str(e)}")
+            QMessageBox.critical(self, "Error", self.tr("error_save").format(error=str(e)))
         finally:
             conn.close()
 
-    # 👇 Método para activar licencia de prueba
     def activate_trial(self):
         from utils.license_manager import save_license
         try:
             save_license(30)
-            QMessageBox.information(self, "Éxito", "Licencia de prueba activada por 30 días.")
+            QMessageBox.information(self, "Éxito", self.tr("success_trial"))
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"No se pudo activar la licencia:\n{str(e)}")
+            QMessageBox.critical(self, "Error", self.tr("error_trial").format(error=str(e)))

@@ -2,9 +2,9 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QGridLayout, QLabel, QPushButton,
     QScrollArea, QVBoxLayout, QHBoxLayout, QMenuBar, QAction, QMessageBox, 
-    QListWidget, QListWidgetItem, QToolButton, QApplication
+    QListWidget, QListWidgetItem, QToolButton, QApplication, QInputDialog
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
 from core.game_scanner import scan_games
 from ui.settings_window import SettingsWindow
@@ -12,22 +12,60 @@ from utils.cover_finder import find_cover
 from ui.theme_manager import apply_theme
 from utils.gamepad_manager import GamepadManager
 from utils.license_manager import is_license_valid
+from utils.fps_overlay import FPSOverlay
 import sqlite3
 import os
 import requests
 
 class MultiverseMainWindow(QMainWindow):
-    def __init__(self, user_token=None):
+    def __init__(self, user_token=None, lang="es"):
         super().__init__()
-        self.setWindowTitle("Multiverse Gamer Emulador")
+        self.lang = lang
+        self.translations = {
+            "es": {
+                "app_title": "Multiverse Gamer Emulador",
+                "view": "Vista",
+                "change_theme": "Cambiar Tema",
+                "big_picture": "Modo Big Picture",
+                "config": "Configuración",
+                "paths_emulators": "Rutas y Emuladores",
+                "user": "Usuario",
+                "subscribe": "Suscribirse",
+                "stats": "Estadísticas",
+                "games_played": "Juegos más jugados",
+                "total_hours": "Horas totales",
+                "no_games": "No se encontraron juegos.\nConfigura las rutas en 'Configuración'.",
+                "play": "Jugar",
+                "favorites": "Favoritos",
+                "graphics": "Gráficos"
+            },
+            "en": {
+                "app_title": "Multiverse Gamer Emulator",
+                "view": "View",
+                "change_theme": "Change Theme",
+                "big_picture": "Big Picture Mode",
+                "config": "Configuration",
+                "paths_emulators": "Paths and Emulators",
+                "user": "User",
+                "subscribe": "Subscribe",
+                "stats": "Statistics",
+                "games_played": "Most Played Games",
+                "total_hours": "Total Hours",
+                "no_games": "No games found.\nConfigure paths in 'Configuration'.",
+                "play": "Play",
+                "favorites": "Favorites",
+                "graphics": "Graphics"
+            }
+        }
+        self.setWindowTitle(self.translations[self.lang]["app_title"])
         self.resize(1200, 800)
         self.current_console_filter = None
         self.is_big_picture = False
         self.current_theme = "Oscuro"
         self.selected_game_id = None
         self.user_token = user_token
+        self.fps_overlay = FPSOverlay(self)
 
-        # Validación de licencia (solo offline)
         if not is_license_valid():
             print("⚠️ Licencia no válida, pero continuando en modo prueba.")
         
@@ -39,7 +77,6 @@ class MultiverseMainWindow(QMainWindow):
         self.gamepad = GamepadManager()
         self.gamepad.start()
 
-        # 👇 Validación ONLINE
         if self.user_token:
             try:
                 response = requests.post(
@@ -54,33 +91,35 @@ class MultiverseMainWindow(QMainWindow):
             except Exception as e:
                 print(f"⚠️ Error al conectar con el servidor: {e}")
 
-    def get_email_from_token(self):
-        if not self.user_token:
-            return None
-        try:
-            import jwt
-            payload = jwt.decode(self.user_token, options={"verify_signature": False})
-            return payload.get("sub")
-        except Exception as e:
-            print(f"Error al decodificar token: {e}")
-            return None
+    def tr(self, key):
+        return self.translations[self.lang].get(key, key)
 
     def init_ui(self):
         menubar = self.menuBar()
-        view_menu = menubar.addMenu("Vista")
-        theme_action = QAction("Cambiar Tema", self)
+        view_menu = menubar.addMenu(self.tr("view"))
+        theme_action = QAction(self.tr("change_theme"), self)
         theme_action.triggered.connect(self.open_settings)
         view_menu.addAction(theme_action)
-        bp_action = QAction("Modo Big Picture", self)
+        bp_action = QAction(self.tr("big_picture"), self)
         bp_action.setShortcut("Ctrl+B")
         bp_action.triggered.connect(self.toggle_big_picture)
         view_menu.addAction(bp_action)
         
-        config_menu = menubar.addMenu("Configuración")
-        settings_action = QAction("Rutas y Emuladores", self)
+        config_menu = menubar.addMenu(self.tr("config"))
+        settings_action = QAction(self.tr("paths_emulators"), self)
         settings_action.triggered.connect(self.open_settings)
         config_menu.addAction(settings_action)
         
+        user_menu = menubar.addMenu(self.tr("user"))
+        subscribe_action = QAction(self.tr("subscribe"), self)
+        subscribe_action.triggered.connect(self.open_subscription)
+        user_menu.addAction(subscribe_action)
+        
+        stats_menu = menubar.addMenu(self.tr("stats"))
+        stats_action = QAction(self.tr("stats"), self)
+        stats_action.triggered.connect(self.open_stats)
+        stats_menu.addAction(stats_action)
+
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
@@ -101,11 +140,6 @@ class MultiverseMainWindow(QMainWindow):
         self.grid_layout.setAlignment(Qt.AlignTop)
         scroll.setWidget(self.grid_widget)
         right_layout.addWidget(scroll)
-        
-        user_menu = menubar.addMenu("Usuario")
-        subscribe_action = QAction("Suscribirse", self)
-        subscribe_action.triggered.connect(self.open_subscription)
-        user_menu.addAction(subscribe_action)
 
     def update_sidebar_style(self):
         self.sidebar.setStyleSheet(f"""
@@ -135,7 +169,7 @@ class MultiverseMainWindow(QMainWindow):
 
     def load_consoles_sidebar(self):
         self.sidebar.clear()
-        all_item = QListWidgetItem("🎮 Todos")
+        all_item = QListWidgetItem("🎮 " + self.tr("favorites"))
         all_item.setData(Qt.UserRole, None)
         self.sidebar.addItem(all_item)
         
@@ -181,7 +215,7 @@ class MultiverseMainWindow(QMainWindow):
         conn.close()
         
         if not games:
-            placeholder = QLabel("No se encontraron juegos.\nConfigura las rutas en 'Configuración'.")
+            placeholder = QLabel(self.tr("no_games"))
             placeholder.setAlignment(Qt.AlignCenter)
             placeholder.setStyleSheet(f"color: {self.theme['text_secondary']}; font-size: 16px;")
             self.grid_layout.addWidget(placeholder, 0, 0)
@@ -233,7 +267,7 @@ class MultiverseMainWindow(QMainWindow):
         console_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(console_label)
         
-        play_btn = QPushButton("Jugar")
+        play_btn = QPushButton(self.tr("play"))
         play_btn.setStyleSheet(f"""
             background-color: {self.theme['accent']}; 
             color: white; 
@@ -243,6 +277,12 @@ class MultiverseMainWindow(QMainWindow):
         """)
         play_btn.clicked.connect(lambda _, gid=game_id: self.launch_game_by_id(gid))
         layout.addWidget(play_btn)
+        
+        config_btn = QPushButton("⚙️")
+        config_btn.setFixedSize(30, 30)
+        config_btn.clicked.connect(lambda _, gid=game_id: self.open_graphics_settings(gid))
+        layout.addWidget(config_btn, alignment=Qt.AlignRight | Qt.AlignTop)
+        
         return card
 
     def update_favorite_icon(self, button, is_favorite):
@@ -267,26 +307,61 @@ class MultiverseMainWindow(QMainWindow):
     def launch_game_by_id(self, game_id):
         from core.emulator_manager import launch_game
         success = launch_game(game_id)
-        if not success:
+        if success:
+            self.start_fps_counter()
+        else:
             QMessageBox.warning(self, "Error", "No se pudo iniciar el juego.\nVerifica las rutas en Configuración.")
 
+    def start_fps_counter(self):
+        """Simula el conteo de FPS."""
+        self.fps_timer = QTimer()
+        self.fps_timer.timeout.connect(self.fps_overlay.count_frame)
+        self.fps_timer.start(16)
+        QTimer.singleShot(2000, self.fps_overlay.toggle)
+
     def open_settings(self):
-        settings = SettingsWindow(self, current_theme=self.current_theme)
+        from ui.settings_window import SettingsWindow
+        settings = SettingsWindow(self, current_theme=self.current_theme, current_lang=self.lang)
         if settings.exec_() == SettingsWindow.Accepted:
             self.current_theme = settings.selected_theme
+            self.lang = settings.selected_lang
             self.theme = apply_theme(QApplication.instance(), self.current_theme)
             self.update_sidebar_style()
             scan_games()
             self.load_games()
 
     def open_subscription(self):
-        from ui.subscription_window import SubscriptionWindow
-        email = self.get_email_from_token()
-        if email:
+        email, ok = QInputDialog.getText(self, "Suscripción", "Email:")
+        if ok and email:
+            from ui.subscription_window import SubscriptionWindow
             sub_window = SubscriptionWindow(email, self)
             sub_window.exec_()
-        else:
-            QMessageBox.warning(self, "Error", "No se pudo obtener tu email.")
+
+    def open_stats(self):
+        from ui.stats_window import StatsWindow
+        stats = StatsWindow(self, lang=self.lang)
+        stats.exec_()
+
+    def open_graphics_settings(self, game_id):
+        import sqlite3
+        import json
+        conn = sqlite3.connect("database/multiverse.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT graphics_profile FROM games WHERE id = ?", (game_id,))
+        result = cursor.fetchone()
+        conn.close()
+        current_profile = json.loads(result[0]) if result and result[0] else {}
+        
+        from ui.graphics_settings_window import GraphicsSettingsWindow
+        dialog = GraphicsSettingsWindow(self, current_profile)
+        if dialog.exec_() == QDialog.Accepted:
+            new_profile = dialog.get_profile()
+            conn = sqlite3.connect("database/multiverse.db")
+            cursor = conn.cursor()
+            cursor.execute("UPDATE games SET graphics_profile = ? WHERE id = ?", (json.dumps(new_profile), game_id))
+            conn.commit()
+            conn.close()
+            QMessageBox.information(self, "Éxito", "Configuración gráfica guardada.")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape and self.is_big_picture:
@@ -294,7 +369,6 @@ class MultiverseMainWindow(QMainWindow):
         else:
             super().keyPressEvent(event)
 
-    # Métodos para gamepad
     def focus_previous(self):
         widgets = [self.grid_layout.itemAt(i).widget() for i in range(self.grid_layout.count())]
         widgets = [w for w in widgets if w]
