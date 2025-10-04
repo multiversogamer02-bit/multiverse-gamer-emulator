@@ -22,13 +22,7 @@ class License(Base):
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
-    id = Column(Integer, primary_key=True)
-    email = Column(String, index=True)
-    token = Column(String, unique=True)
-    expires_at = Column(DateTime)
-    
-class PasswordResetToken(Base):
-    __tablename__ = "password_reset_tokens"
+    __table_args__ = {'extend_existing': True}  # ← Esta línea es la clave
     id = Column(Integer, primary_key=True)
     email = Column(String, index=True)
     token = Column(String, unique=True)
