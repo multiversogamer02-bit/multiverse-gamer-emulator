@@ -67,3 +67,18 @@ def get_all_users() -> list:
     except Exception as e:
         print(f"Excepción al obtener usuarios: {e}")
         return []
+        
+def create_subscription(email: str, plan: str) -> str:
+    """Devuelve la URL de pago para el plan seleccionado."""
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/payment/mercadopago",
+            json={"email": email, "plan": plan},
+            timeout=5
+        )
+        if response.status_code == 200:
+            return response.json().get("payment_url")
+        return None
+    except Exception as e:
+        print(f"Error al crear suscripción: {e}")
+        return None        

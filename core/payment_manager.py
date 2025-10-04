@@ -3,11 +3,13 @@ import mercadopago
 import os
 
 def create_mercadopago_payment(email: str, plan: str):
-    sdk = mercadopago.SDK(os.getenv("MERCADOPAGO_ACCESS_TOKEN"))
-    
-    # Mapear planes a precios
-    prices = {"mensual": 1000, "trimestral": 2700, "anual": 9600}
-    amount = prices.get(plan, 1000)
+    # 👇 Precios actualizados en ARS
+    prices = {
+        "mensual": 10000,
+        "trimestral": 27000,
+        "anual": 96000
+    }
+    amount = prices.get(plan, 10000)
     
     request_options = mercadopago.config.RequestOptions()
     request_options.custom_headers = {
@@ -15,7 +17,7 @@ def create_mercadopago_payment(email: str, plan: str):
     }
     
     payment_data = {
-        "transaction_amount": float(amount),
+        "transaction_amount": float(amount),  # Ej: 10000.0
         "description": f"Suscripción {plan} - Multiverse Gamer",
         "payment_method_id": "visa",  # Opcional en sandbox
         "payer": {

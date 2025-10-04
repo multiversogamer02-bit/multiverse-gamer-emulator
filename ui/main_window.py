@@ -14,6 +14,7 @@ from utils.gamepad_manager import GamepadManager
 from utils.license_manager import is_license_valid
 import sqlite3
 import os
+import requests
 
 class MultiverseMainWindow(QMainWindow):
     def __init__(self, user_token=None):
@@ -24,7 +25,7 @@ class MultiverseMainWindow(QMainWindow):
         self.is_big_picture = False
         self.current_theme = "Oscuro"
         self.selected_game_id = None
-        self.user_token = user_token  # ← Ahora acepta el token sin error
+        self.user_token = user_token
 
         # Validación de licencia (solo offline)
         if not is_license_valid():
@@ -38,9 +39,8 @@ class MultiverseMainWindow(QMainWindow):
         self.gamepad = GamepadManager()
         self.gamepad.start()
 
-        # 👇 Validación ONLINE (opcional, pero ahora segura)
+        # 👇 Validación ONLINE
         if self.user_token:
-            import requests
             try:
                 response = requests.post(
                     "https://multiverse-server.onrender.com/validate-license",
@@ -53,6 +53,17 @@ class MultiverseMainWindow(QMainWindow):
                     print("❌ Licencia online inválida o expirada.")
             except Exception as e:
                 print(f"⚠️ Error al conectar con el servidor: {e}")
+
+    def get_email_from_token(self):
+        if not self.user_token:
+            return None
+        try:
+            import jwt
+            payload = jwt.decode(self.user_token, options={"verify_signature": False})
+            return payload.get("sub")
+        except Exception as e:
+            print(f"Error al decodificar token: {e}")
+            return None
 
     def init_ui(self):
         menubar = self.menuBar()
@@ -90,6 +101,11 @@ class MultiverseMainWindow(QMainWindow):
         self.grid_layout.setAlignment(Qt.AlignTop)
         scroll.setWidget(self.grid_widget)
         right_layout.addWidget(scroll)
+        
+        user_menu = menubar.addMenu("Usuario")
+        subscribe_action = QAction("Suscribirse", self)
+        subscribe_action.triggered.connect(self.open_subscription)
+        user_menu.addAction(subscribe_action)
 
     def update_sidebar_style(self):
         self.sidebar.setStyleSheet(f"""
@@ -262,6 +278,15 @@ class MultiverseMainWindow(QMainWindow):
             self.update_sidebar_style()
             scan_games()
             self.load_games()
+
+    def open_subscription(self):
+        from ui.subscription_window import SubscriptionWindow
+        email = self.get_email_from_token()
+        if email:
+            sub_window = SubscriptionWindow(email, self)
+            sub_window.exec_()
+        else:
+            QMessageBox.warning(self, "Error", "No se pudo obtener tu email.")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape and self.is_big_picture:
