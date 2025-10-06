@@ -147,7 +147,8 @@ def forgot_password(email: str = Form(...), db: Session = Depends(get_db)):
     db.add(reset_token)
     db.commit()
     
-    # Enviar email real con SendGrid
+    # 👇 Aquí va la URL de restablecimiento
+    reset_url = f"https://multiverse-server.onrender.com/auth/reset?token={token}"
     send_password_reset_email(email, token)
     return {"msg": "Email enviado."}
 
@@ -230,3 +231,33 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "created_at": u.created_at.isoformat() if u.created_at else None,
         "is_admin": u.is_admin
     } for u in users]
+    
+# Página de restablecimiento (HTML simple)
+@app.get("/auth/reset")
+def reset_password_page(token: str):
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Restablecer Contraseña - Multiverse Gamer</title>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; background: #1e1e1e; color: white; text-align: center; padding: 50px; }}
+            .container {{ max-width: 400px; margin: 0 auto; background: #2d2d2d; padding: 30px; border-radius: 10px; }}
+            input {{ width: 100%; padding: 10px; margin: 10px 0; border: none; border-radius: 5px; }}
+            button {{ background: #0078d7; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }}
+            button:hover {{ background: #005a9e; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>🔒 Restablecer Contraseña</h2>
+            <form id="resetForm" method="POST" action="/auth/reset-password">
+                <input type="hidden" name="token" value="{token}">
+                <input type="password" name="new_password" placeholder="Nueva contraseña" required>
+                <button type="submit">Restablecer</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
