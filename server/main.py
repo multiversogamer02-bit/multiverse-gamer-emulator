@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from pydantic import BaseModel
 from server import models, database
+from core.email_manager import send_password_reset_email
 import os
 import bcrypt
 import secrets
@@ -138,20 +139,16 @@ def refresh_token(refresh_token: str = Form(...), db: Session = Depends(get_db))
 def forgot_password(email: str = Form(...), db: Session = Depends(get_db)):
     user = get_user(db, email)
     if not user:
-        # No revelar si el email existe
         return {"msg": "Si el email es válido, recibirás un enlace."}
     
-    # Generar token único
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-    
-    # Guardar en base de datos (agrega tabla password_reset_tokens en models.py)
     reset_token = models.PasswordResetToken(email=email, token=token, expires_at=expires_at)
     db.add(reset_token)
     db.commit()
     
-    # Aquí deberías enviar un email (pendiente de implementar con SendGrid)
-    print(f"DEBUG: Token de restablecimiento para {email}: {token}")
+    # Enviar email real con SendGrid
+    send_password_reset_email(email, token)
     return {"msg": "Email enviado."}
 
 @app.post("/auth/reset-password")
