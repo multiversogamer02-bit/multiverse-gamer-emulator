@@ -1,7 +1,10 @@
 # core/payment_manager.py
 import mercadopago
 import os
-import requests
+from dotenv import load_dotenv
+
+# Cargar variables de .env (solo si existe)
+load_dotenv()
 
 def create_mercadopago_payment(email: str, plan: str) -> str:
     # 1. Validar que el token exista y sea string
