@@ -10,6 +10,8 @@ from core.email_manager import send_password_reset_email
 import os
 import bcrypt
 import secrets
+import hashlib
+import hmac
 
 app = FastAPI(title="Multiverse Gamer API")
 
@@ -261,3 +263,79 @@ def reset_password_page(token: str):
     </body>
     </html>
     """
+
+@app.post("/webhooks/paypal")
+async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
+    # 1. Validar firma
+    auth_algo = request.headers.get("paypal-auth-algo")
+    cert_url = request.headers.get("paypal-cert-url")
+    transmission_id = request.headers.get("paypal-transmission-id")
+    transmission_sig = request.headers.get("paypal-transmission-sig")
+    transmission_time = request.headers.get("paypal-transmission-time")
+    
+    if not all([auth_algo, cert_url, transmission_id, transmission_sig, transmission_time]):
+        raise HTTPException(status_code=400, detail="Firma incompleta")
+    
+    # Obtener cuerpo del request
+    body = await request.body()
+    
+    # 2. Obtener access token para verificar
+    client_id = os.getenv("PAYPAL_CLIENT_ID")
+    client_secret = os.getenv("PAYPAL_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=500, detail="Faltan credenciales de PayPal")
+    
+    async with httpx.AsyncClient() as client:
+        # Obtener access token
+        auth_resp = await client.post(
+            "https://api.paypal.com/v1/oauth2/token",
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"}
+        )
+        if auth_resp.status_code != 200:
+            raise HTTPException(status_code=500, detail="Error autenticando en PayPal")
+        access_token = auth_resp.json()["access_token"]
+        
+        # Verificar firma
+        verify_resp = await client.post(
+            "https://api.paypal.com/v1/notifications/verify-webhook-signature",
+            json={
+                "auth_algo": auth_algo,
+                "cert_url": cert_url,
+                "transmission_id": transmission_id,
+                "transmission_sig": transmission_sig,
+                "transmission_time": transmission_time,
+                "webhook_id": os.getenv("PAYPAL_WEBHOOK_ID", ""),
+                "webhook_event": await request.json()
+            },
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+    
+    # 3. Procesar si la firma es válida
+    verification = verify_resp.json()
+    if verification.get("verification_status") != "SUCCESS":
+        raise HTTPException(status_code=403, detail="Firma de PayPal inválida")
+    
+    # 4. Procesar el evento
+    payload = await request.json()
+    if payload.get("event_type") == "PAYMENT.SALE.COMPLETED":
+        # Extraer email (debes guardarlo en custom_id al crear el pago)
+        custom_id = payload.get("resource", {}).get("custom_id")
+        if custom_id:
+            email = custom_id
+            plan = "mensual"  # Ajusta según tu lógica
+            
+            user = get_user(db, email)
+            if user:
+                new_license = models.License(
+                    user_id=user.id,
+                    machine_id="web",
+                    plan=plan,
+                    valid_until=datetime.now(timezone.utc) + timedelta(days=30),
+                    is_active=True
+                )
+                db.add(new_license)
+                db.commit()
+                return {"status": "licencia_activada"}
+    
+    return {"status": "evento_procesado"}
