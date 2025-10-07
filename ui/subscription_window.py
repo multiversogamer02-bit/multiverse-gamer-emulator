@@ -1,5 +1,8 @@
 # ui/subscription_window.py
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QMessageBox, QComboBox
+from PyQt5.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
+    QMessageBox, QComboBox
+)
 from core.payment_manager import create_mercadopago_payment, create_paypal_payment
 import webbrowser
 
