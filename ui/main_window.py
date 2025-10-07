@@ -83,10 +83,11 @@ class MultiverseMainWindow(QMainWindow):
 
         if self.user_token:
             try:
+                # ✅ Ahora (envía como formulario)
                 response = requests.post(
                     "https://multiverse-server.onrender.com/validate-license",
                     headers={"Authorization": f"Bearer {self.user_token}"},
-                    json={"machine_id": "desktop-local"}
+                    data={"machine_id": "desktop-local"}  # ← Usa `data`, no `json`
                 )
                 if response.status_code == 200:
                     print("✅ Licencia online válida.")
