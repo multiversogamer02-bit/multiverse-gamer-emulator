@@ -1,6 +1,6 @@
 # ui/subscription_window.py
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QMessageBox
-from core.online_manager import create_subscription
+from core.payment_manager import create_mercadopago_payment, create_paypal_payment
 import webbrowser
 
 class SubscriptionWindow(QDialog):
@@ -28,10 +28,19 @@ class SubscriptionWindow(QDialog):
         layout.addWidget(btn_anual)
 
     def start_payment(self, plan: str):
-        url = create_subscription(self.email, plan)
-        if url:
-            webbrowser.open(url)
-            QMessageBox.information(self, "Pago", "Se abrirá el navegador para completar el pago.")
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Error", "No se pudo iniciar el pago.")
+        try:
+            if plan == "mensual":
+                payment_url = create_mercadopago_payment(self.email, "mensual")
+            elif plan == "trimestral":
+                payment_url = create_mercadopago_payment(self.email, "trimestral")
+            else:
+                payment_url = create_mercadopago_payment(self.email, "anual")
+        
+            if payment_url:
+                webbrowser.open(payment_url)
+                QMessageBox.information(self, "Pago", "Se abrirá el navegador para completar el pago.")
+                self.accept()
+            else:
+                QMessageBox.critical(self, "Error", "No se pudo generar la URL de pago.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo iniciar el pago: {str(e)}")
