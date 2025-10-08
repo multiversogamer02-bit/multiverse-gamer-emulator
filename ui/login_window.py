@@ -9,7 +9,7 @@ from core.online_manager import register_user, login_user, save_refresh_token
 class LoginWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("?? Iniciar Sesión - Multiverse Gamer")
+        self.setWindowTitle("?? Iniciar Sesi贸n - Multiverse Gamer")
         self.resize(400, 300)
         self.token = None
         self.init_ui()
@@ -19,7 +19,7 @@ class LoginWindow(QDialog):
         tabs = QTabWidget()
         self.login_tab = self.create_login_tab()
         self.register_tab = self.create_register_tab()
-        tabs.addTab(self.login_tab, "Iniciar Sesión")
+        tabs.addTab(self.login_tab, "Iniciar Sesi贸n")
         tabs.addTab(self.register_tab, "Crear Cuenta")
         layout.addWidget(tabs)
 
@@ -33,7 +33,7 @@ class LoginWindow(QDialog):
         self.login_password = QLineEdit()
         self.login_password.setEchoMode(QLineEdit.Password)
         layout.addWidget(self.login_password)
-        login_btn = QPushButton("Iniciar Sesión")
+        login_btn = QPushButton("Iniciar Sesi贸n")
         login_btn.clicked.connect(self.handle_login)
         layout.addWidget(login_btn)
         return widget
@@ -65,17 +65,17 @@ class LoginWindow(QDialog):
             save_refresh_token(result["refresh_token"])
             self.accept()
         else:
-            QMessageBox.critical(self, "Error", "Credenciales inválidas.")
+            QMessageBox.critical(self, "Error", "Credenciales inv谩lidas.")
 
     def handle_register(self):
         email = self.reg_email.text()
         password = self.reg_password.text()
         if not email or not password or len(password) < 6:
-            QMessageBox.warning(self, "Error", "Email válido y contrase?a de 6+ caracteres.")
+            QMessageBox.warning(self, "Error", "Email v谩lido y contrase?a de 6+ caracteres.")
             return
         if register_user(email, password):
-            QMessageBox.information(self, "éxito", "Cuenta creada. Ahora inicia sesión.")
+            QMessageBox.information(self, "茅xito", "Cuenta creada. Ahora inicia sesi贸n.")
             self.reg_email.clear()
             self.reg_password.clear()
         else:
-            QMessageBox.critical(self, "Error", "El email ya está registrado.")
+            QMessageBox.critical(self, "Error", "El email ya est谩 registrado.")
