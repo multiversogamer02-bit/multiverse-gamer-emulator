@@ -1,5 +1,5 @@
 # server/models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from .database import Base
 from datetime import datetime
 
