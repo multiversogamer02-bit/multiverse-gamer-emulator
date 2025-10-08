@@ -14,11 +14,21 @@ import hmac
 import hashlib
 import httpx
 
+# 👇 Validación de variables de entorno al iniciar
+def validate_env():
+    required = ["SECRET_KEY", "MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "DATABASE_URL"]
+    missing = [var for var in required if not os.getenv(var)]
+    if missing:
+        raise EnvironmentError(f"❌ Variables faltantes: {', '.join(missing)}")
+    if not os.getenv("DATABASE_URL", "").startswith("postgresql"):
+        print("⚠️  DATABASE_URL no es PostgreSQL. ¿Estás en desarrollo?")
+validate_env()
+
 app = FastAPI(title="Multiverse Gamer API")
 
 models.Base.metadata.create_all(bind=database.engine)
 
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_para_desarrollo")
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 30
@@ -36,11 +46,9 @@ class PaymentRequest(BaseModel):
     email: str
     plan: str
 
-# 👇 NUEVO MODELO PARA VALIDACIÓN
 class LicenseValidateRequest(BaseModel):
     machine_id: str
 
-# 👇 NUEVO MODELO PARA ACTIVACIÓN
 class LicenseActivateRequest(BaseModel):
     machine_id: str
     plan: str
@@ -103,6 +111,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     if user is None:
         raise credentials_exception
     return user
+
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok"}
 
 @app.get("/")
 def read_root():
@@ -192,13 +204,22 @@ def validate_license(
         raise HTTPException(status_code=403, detail="Licencia inválida")
     return {"status": "valid", "expires": license.valid_until.isoformat()}
 
-# 👇 NUEVO ENDPOINT: activar licencia con machine_id real
+# 👇 NUEVO: activar licencia con machine_id real
 @app.post("/license/activate")
 def activate_license(
     request: LicenseActivateRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # Verificar que el usuario tenga una suscripción activa
+    subscription = db.query(models.Subscription).filter(
+        models.Subscription.user_id == current_user.id,
+        models.Subscription.status == "active",
+        models.Subscription.end_date > datetime.now(timezone.utc)
+    ).first()
+    if not subscription:
+        raise HTTPException(status_code=403, detail="No tienes suscripción activa")
+    
     new_license = models.License(
         user_id=current_user.id,
         machine_id=request.machine_id,
@@ -216,7 +237,6 @@ def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
     user = get_user(db, email)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    # ✅ Solo redirige, no crea licencia
     return {"message": "Pago exitoso. Ahora activa tu licencia desde el launcher."}
 
 @app.get("/payment/failure")
@@ -256,7 +276,7 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "is_admin": u.is_admin
     } for u in users]
 
-# 👇 WEBHOOK DE MERCADO PAGO (sin crear licencia)
+# 👇 WEBHOOK DE MERCADO PAGO (solo marca pago aprobado)
 @app.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("x-signature")
@@ -312,9 +332,22 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
         if status == "approved" and email:
             user = get_user(db, email)
             if not user:
-                raise HTTPException(status_code=404, detail="Usuario no encontrado")
-            # ✅ No se crea licencia aquí → se hace en /license/activate
-            return {"status": "pago_aprobado"}
+                # Opcional: crear usuario si no existe
+                hashed = get_password_hash(secrets.token_urlsafe(16))
+                user = models.User(email=email, hashed_password=hashed)
+                db.add(user)
+                db.commit()
+            
+            # Crear suscripción (NO licencia)
+            subscription = models.Subscription(
+                user_id=user.id,
+                plan=plan,
+                status="active",
+                end_date=datetime.now(timezone.utc) + timedelta(days=30)
+            )
+            db.add(subscription)
+            db.commit()
+            return {"status": "suscripcion_activada"}
         
         return {"status": "evento_procesado", "payment_status": status}
         
@@ -349,6 +382,3 @@ def reset_password_page(token: str):
     </body>
     </html>
     """
-@app.get("/healthz")
-def health_check():
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
