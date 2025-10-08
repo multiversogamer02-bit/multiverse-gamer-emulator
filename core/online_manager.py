@@ -1,20 +1,54 @@
 # core/online_manager.py
 import requests
 import os
+import jwt
+from cryptography.fernet import Fernet
 from utils.license_manager import get_machine_id
 
 SERVER_URL = "https://multiverse-server.onrender.com"
+TOKEN_PATH = os.path.expanduser("~/.multiverse/refresh.token")
+KEY_PATH = os.path.expanduser("~/.multiverse/crypto.key")
+
+def _get_crypto_key():
+    if not os.path.exists(KEY_PATH):
+        key = Fernet.generate_key()
+        os.makedirs(os.path.dirname(KEY_PATH), exist_ok=True)
+        with open(KEY_PATH, "wb") as f:
+            f.write(key)
+    else:
+        with open(KEY_PATH, "rb") as f:
+            key = f.read()
+    return key
+
+def save_refresh_token(token: str):
+    key = _get_crypto_key()
+    fernet = Fernet(key)
+    encrypted = fernet.encrypt(token.encode())
+    os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
+    with open(TOKEN_PATH, "wb") as f:
+        f.write(encrypted)
+
+def load_refresh_token() -> str:
+    if not os.path.exists(TOKEN_PATH):
+        return None
+    try:
+        key = _get_crypto_key()
+        fernet = Fernet(key)
+        with open(TOKEN_PATH, "rb") as f:
+            encrypted = f.read()
+        return fernet.decrypt(encrypted).decode()
+    except:
+        return None
 
 def register_user(email: str, password: str) -> bool:
     try:
         response = requests.post(
             f"{SERVER_URL}/register",
             data={"email": email, "password": password},
-            timeout=5
+            timeout=10
         )
         return response.status_code == 200
-    except Exception as e:
-        print(f"Error en registro: {e}")
+    except:
         return False
 
 def login_user(email: str, password: str) -> dict:
@@ -22,26 +56,11 @@ def login_user(email: str, password: str) -> dict:
         response = requests.post(
             f"{SERVER_URL}/token",
             data={"username": email, "password": password},
-            timeout=5
+            timeout=10
         )
-        if response.status_code == 200:
-            return response.json()
+        return response.json() if response.status_code == 200 else None
+    except:
         return None
-    except Exception as e:
-        print(f"Error en login: {e}")
-        return None
-
-def request_password_reset(email: str) -> bool:
-    try:
-        response = requests.post(
-            f"{SERVER_URL}/auth/forgot-password",
-            data={"email": email},
-            timeout=5
-        )
-        return response.status_code == 200
-    except Exception as e:
-        print(f"Error en recuperación: {e}")
-        return False
 
 def validate_license_online(token: str) -> bool:
     try:
@@ -50,45 +69,18 @@ def validate_license_online(token: str) -> bool:
             f"{SERVER_URL}/validate-license",
             headers={"Authorization": f"Bearer {token}"},
             json={"machine_id": machine_id},
-            timeout=5
+            timeout=10
         )
         return response.status_code == 200
-    except Exception as e:
-        print(f"Error en validación de licencia: {e}")
+    except:
         return False
 
 def get_user_role(token: str) -> str:
     try:
-        import jwt
-        payload = jwt.decode(token, options={"verify_signature": False})
+        # Verificar firma con clave secreta del servidor (simulado)
+        SECRET_KEY = os.getenv("JWT_SECRET", "fallback_inseguro")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         email = payload.get("sub")
-        admin_emails = ["rodrigoaguirre196@gmail.com"]
-        return "admin" if email in admin_emails else "user"
-    except Exception as e:
-        print(f"Error al decodificar token: {e}")
+        return "admin" if email == "rodrigoaguirre196@gmail.com" else "user"
+    except:
         return "user"
-
-def get_all_users() -> list:
-    try:
-        response = requests.get(f"{SERVER_URL}/admin/users", timeout=5)
-        if response.status_code == 200:
-            return response.json()
-        return []
-    except Exception as e:
-        print(f"Excepción al obtener usuarios: {e}")
-        return []
-
-def save_refresh_token(token: str):
-    """Guarda el refresh token en un archivo local seguro."""
-    os.makedirs(os.path.expanduser("~/.multiverse"), exist_ok=True)
-    token_path = os.path.expanduser("~/.multiverse/refresh.token")
-    with open(token_path, "w") as f:
-        f.write(token)
-
-def load_refresh_token() -> str:
-    """Carga el refresh token desde el archivo local."""
-    token_path = os.path.expanduser("~/.multiverse/refresh.token")
-    if os.path.exists(token_path):
-        with open(token_path, "r") as f:
-            return f.read().strip()
-    return None

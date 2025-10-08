@@ -1,5 +1,5 @@
 # server/models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from .database import Base
 from datetime import datetime
 
@@ -11,10 +11,19 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    plan = Column(String)  # "mensual", "trimestral", "anual"
+    status = Column(String, default="active")  # "active", "canceled", "expired"
+    start_date = Column(DateTime, default=datetime.utcnow)
+    end_date = Column(DateTime)
+
 class License(Base):
     __tablename__ = "licenses"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
     machine_id = Column(String, index=True)
     plan = Column(String)
     valid_until = Column(DateTime)
@@ -22,7 +31,7 @@ class License(Base):
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
-    __table_args__ = {'extend_existing': True}  # ← Esta línea es la clave
+    __table_args__ = {'extend_existing': True}
     id = Column(Integer, primary_key=True)
     email = Column(String, index=True)
     token = Column(String, unique=True)

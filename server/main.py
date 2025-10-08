@@ -36,6 +36,15 @@ class PaymentRequest(BaseModel):
     email: str
     plan: str
 
+# 👇 NUEVO MODELO PARA VALIDACIÓN
+class LicenseValidateRequest(BaseModel):
+    machine_id: str
+
+# 👇 NUEVO MODELO PARA ACTIVACIÓN
+class LicenseActivateRequest(BaseModel):
+    machine_id: str
+    plan: str
+
 def get_db():
     db = database.SessionLocal()
     try:
@@ -167,10 +176,15 @@ def reset_password(token: str = Form(...), new_password: str = Form(...), db: Se
         db.commit()
     return {"msg": "Contraseña actualizada."}
 
+# 👇 CORREGIDO: recibe JSON
 @app.post("/validate-license")
-def validate_license(machine_id: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def validate_license(
+    request: LicenseValidateRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     license = db.query(models.License).filter(
-        models.License.machine_id == machine_id,
+        models.License.machine_id == request.machine_id,
         models.License.user_id == current_user.id,
         models.License.is_active == True
     ).first()
@@ -178,21 +192,32 @@ def validate_license(machine_id: str, current_user: models.User = Depends(get_cu
         raise HTTPException(status_code=403, detail="Licencia inválida")
     return {"status": "valid", "expires": license.valid_until.isoformat()}
 
-@app.get("/payment/success")
-def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
-    user = get_user(db, email)
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+# 👇 NUEVO ENDPOINT: activar licencia con machine_id real
+@app.post("/license/activate")
+def activate_license(
+    request: LicenseActivateRequest,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     new_license = models.License(
-        user_id=user.id,
-        machine_id="web",
-        plan=plan,
+        user_id=current_user.id,
+        machine_id=request.machine_id,
+        plan=request.plan,
         valid_until=datetime.now(timezone.utc) + timedelta(days=30),
         is_active=True
     )
     db.add(new_license)
     db.commit()
-    return {"message": "Pago exitoso. Licencia activada."}
+    return {"status": "activated", "expires": new_license.valid_until.isoformat()}
+
+# 👇 ELIMINADO: ya no se crea licencia aquí
+@app.get("/payment/success")
+def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
+    user = get_user(db, email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    # ✅ Solo redirige, no crea licencia
+    return {"message": "Pago exitoso. Ahora activa tu licencia desde el launcher."}
 
 @app.get("/payment/failure")
 def payment_failure():
@@ -231,42 +256,33 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "is_admin": u.is_admin
     } for u in users]
 
-# 👇 WEBHOOK DE MERCADO PAGO CON VALIDACIÓN DE FIRMA
+# 👇 WEBHOOK DE MERCADO PAGO (sin crear licencia)
 @app.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
-    # 1. Validar firma
     signature = request.headers.get("x-signature")
     if not signature:
         raise HTTPException(status_code=400, detail="Firma ausente")
-    
+
     data = await request.body()
     data_str = data.decode("utf-8")
-    
-    # Extraer ts y v1 desde x-signature (ej: ts=1712345678,v1=abc123...)
+
     sig_parts = dict(part.split("=") for part in signature.split(","))
     ts = sig_parts.get("ts")
     v1 = sig_parts.get("v1")
-    
+
     if not ts or not v1:
         raise HTTPException(status_code=400, detail="Firma mal formada")
-    
-    # Construir mensaje para HMAC: ts + body
+
     message = f"{ts}{data_str}"
     secret = os.getenv("MERCADOPAGO_WEBHOOK_SECRET")
     if not secret:
         raise HTTPException(status_code=500, detail="Falta MERCADOPAGO_WEBHOOK_SECRET")
-    
-    # Calcular HMAC-SHA256
-    hmac_hash = hmac.new(
-        secret.encode(),
-        message.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
+
+    hmac_hash = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+
     if not hmac.compare_digest(hmac_hash, v1):
         raise HTTPException(status_code=403, detail="Firma inválida")
     
-    # 2. Procesar el evento
     try:
         payload = await request.json()
         action = payload.get("action")
@@ -275,7 +291,6 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
         if not action or not data_id:
             raise HTTPException(status_code=400, detail="Payload inválido")
         
-        # Obtener detalles del pago
         mp_access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
         if not mp_access_token:
             raise HTTPException(status_code=500, detail="Falta MERCADOPAGO_ACCESS_TOKEN")
@@ -292,31 +307,20 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
         payment_data = payment_resp.json()
         status = payment_data.get("status")
         email = payment_data.get("payer", {}).get("email")
-        plan = "mensual"  # Ajusta según tu lógica (puedes usar metadata)
+        plan = "mensual"
         
         if status == "approved" and email:
-            # Crear/renovar licencia
             user = get_user(db, email)
             if not user:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
-            
-            new_license = models.License(
-                user_id=user.id,
-                machine_id="web",
-                plan=plan,
-                valid_until=datetime.now(timezone.utc) + timedelta(days=30),
-                is_active=True
-            )
-            db.add(new_license)
-            db.commit()
-            return {"status": "licencia_activada"}
+            # ✅ No se crea licencia aquí → se hace en /license/activate
+            return {"status": "pago_aprobado"}
         
         return {"status": "evento_procesado", "payment_status": status}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando webhook: {str(e)}")
 
-# Página de restablecimiento (HTML simple)
 @app.get("/auth/reset")
 def reset_password_page(token: str):
     return f"""
@@ -345,3 +349,6 @@ def reset_password_page(token: str):
     </body>
     </html>
     """
+@app.get("/healthz")
+def health_check():
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}

@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QGridLayout, QLabel, QPushButton,
     QScrollArea, QVBoxLayout, QHBoxLayout, QMenuBar, QAction, QMessageBox, 
-    QListWidget, QListWidgetItem, QToolButton, QApplication, QInputDialog
+    QListWidget, QListWidgetItem, QToolButton, QApplication, QInputDialog, QDialog
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
@@ -11,7 +11,7 @@ from ui.settings_window import SettingsWindow
 from utils.cover_finder import find_cover
 from ui.theme_manager import apply_theme
 from utils.gamepad_manager import GamepadManager
-from utils.license_manager import is_license_valid
+from utils.license_manager import is_license_valid, get_machine_id
 from utils.fps_overlay import FPSOverlay
 import sqlite3
 import os
@@ -69,10 +69,8 @@ class MultiverseMainWindow(QMainWindow):
         self.selected_game_id = None
         self.user_token = user_token
         self.fps_overlay = FPSOverlay(self)
-
         if not is_license_valid():
             print("⚠️ Licencia no válida, pero continuando en modo prueba.")
-        
         self.theme = apply_theme(QApplication.instance(), self.current_theme)
         self.init_ui()
         scan_games()
@@ -80,21 +78,8 @@ class MultiverseMainWindow(QMainWindow):
         self.load_games()
         self.gamepad = GamepadManager()
         self.gamepad.start()
-
         if self.user_token:
-            try:
-                # ✅ Ahora (envía como formulario)
-                response = requests.post(
-                    "https://multiverse-server.onrender.com/validate-license",
-                    headers={"Authorization": f"Bearer {self.user_token}"},
-                    data={"machine_id": "desktop-local"}  # ← Usa `data`, no `json`
-                )
-                if response.status_code == 200:
-                    print("✅ Licencia online válida.")
-                else:
-                    print("❌ Licencia online inválida o expirada.")
-            except Exception as e:
-                print(f"⚠️ Error al conectar con el servidor: {e}")
+            self.validate_online_license()
 
     def tr(self, key):
         return self.translations[self.lang].get(key, key)
@@ -109,40 +94,32 @@ class MultiverseMainWindow(QMainWindow):
         bp_action.setShortcut("Ctrl+B")
         bp_action.triggered.connect(self.toggle_big_picture)
         view_menu.addAction(bp_action)
-        
         config_menu = menubar.addMenu(self.tr("config"))
         settings_action = QAction(self.tr("paths_emulators"), self)
         settings_action.triggered.connect(self.open_settings)
         config_menu.addAction(settings_action)
-        
         user_menu = menubar.addMenu(self.tr("user"))
         subscribe_action = QAction(self.tr("subscribe"), self)
         subscribe_action.triggered.connect(self.open_subscription)
         user_menu.addAction(subscribe_action)
-        
         stats_menu = menubar.addMenu(self.tr("stats"))
         stats_action = QAction(self.tr("stats"), self)
         stats_action.triggered.connect(self.open_stats)
         stats_menu.addAction(stats_action)
-
         hardware_menu = menubar.addMenu(self.tr("hardware"))
         hardware_action = QAction(self.tr("view_hardware"), self)
         hardware_action.triggered.connect(self.show_hardware_info)
         hardware_menu.addAction(hardware_action)
-
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
-        
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(200)
         self.update_sidebar_style()
         self.sidebar.itemClicked.connect(self.on_console_selected)
         main_layout.addWidget(self.sidebar)
-        
         right_layout = QVBoxLayout()
         main_layout.addLayout(right_layout)
-        
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         self.grid_widget = QWidget()
@@ -182,13 +159,11 @@ class MultiverseMainWindow(QMainWindow):
         all_item = QListWidgetItem("🎮 " + self.tr("favorites"))
         all_item.setData(Qt.UserRole, None)
         self.sidebar.addItem(all_item)
-        
         conn = sqlite3.connect("database/multiverse.db")
         cursor = conn.cursor()
         cursor.execute("SELECT id, name FROM consoles ORDER BY name")
         consoles = cursor.fetchall()
         conn.close()
-        
         for console_id, name in consoles:
             item = QListWidgetItem(f"🕹️ {name}")
             item.setData(Qt.UserRole, console_id)
@@ -205,7 +180,6 @@ class MultiverseMainWindow(QMainWindow):
             child = self.grid_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
-                
         conn = sqlite3.connect("database/multiverse.db")
         cursor = conn.cursor()
         if self.current_console_filter is None:
@@ -223,7 +197,6 @@ class MultiverseMainWindow(QMainWindow):
             """, (self.current_console_filter,))
         games = cursor.fetchall()
         conn.close()
-        
         if not games:
             placeholder = QLabel(self.tr("no_games"))
             placeholder.setAlignment(Qt.AlignCenter)
@@ -245,16 +218,13 @@ class MultiverseMainWindow(QMainWindow):
         card.setStyleSheet(f"background-color: {self.theme['card_bg']}; border-radius: 10px;")
         card.setFocusPolicy(Qt.StrongFocus)
         card.game_id = game_id
-        
         layout = QVBoxLayout(card)
         layout.setAlignment(Qt.AlignTop)
-        
         fav_btn = QToolButton()
         fav_btn.setFixedSize(30 if self.is_big_picture else 24, 30 if self.is_big_picture else 24)
         self.update_favorite_icon(fav_btn, is_favorite)
         fav_btn.clicked.connect(lambda _, gid=game_id, btn=fav_btn: self.toggle_favorite(gid, btn))
         layout.addWidget(fav_btn, alignment=Qt.AlignRight)
-        
         cover_label = QLabel()
         cover_size = 360 if self.is_big_picture else 180
         cover_label.setFixedSize(cover_size, cover_size)
@@ -266,17 +236,14 @@ class MultiverseMainWindow(QMainWindow):
         else:
             cover_label.setStyleSheet(f"background-color: #444; border-radius: 8px;")
         layout.addWidget(cover_label, alignment=Qt.AlignCenter)
-        
         title_label = QLabel(title[:30] + "..." if len(title) > 30 else title)
         title_label.setStyleSheet(f"color: {self.theme['text']}; font-size: {'24px' if self.is_big_picture else '14px'}; font-weight: bold;")
         title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(title_label)
-        
         console_label = QLabel(console)
         console_label.setStyleSheet(f"color: {self.theme['text_secondary']}; font-size: {'18px' if self.is_big_picture else '12px'};")
         console_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(console_label)
-        
         play_btn = QPushButton(self.tr("play"))
         play_btn.setStyleSheet(f"""
             background-color: {self.theme['accent']}; 
@@ -287,12 +254,10 @@ class MultiverseMainWindow(QMainWindow):
         """)
         play_btn.clicked.connect(lambda _, gid=game_id: self.launch_game_by_id(gid))
         layout.addWidget(play_btn)
-        
         config_btn = QPushButton("⚙️")
         config_btn.setFixedSize(30, 30)
         config_btn.clicked.connect(lambda _, gid=game_id: self.open_graphics_settings(gid))
         layout.addWidget(config_btn, alignment=Qt.AlignRight | Qt.AlignTop)
-        
         return card
 
     def update_favorite_icon(self, button, is_favorite):
@@ -365,7 +330,6 @@ class MultiverseMainWindow(QMainWindow):
         result = cursor.fetchone()
         conn.close()
         current_profile = json.loads(result[0]) if result and result[0] else {}
-        
         from ui.graphics_settings_window import GraphicsSettingsWindow
         dialog = GraphicsSettingsWindow(self, current_profile)
         if dialog.exec_() == QDialog.Accepted:
@@ -413,3 +377,20 @@ class MultiverseMainWindow(QMainWindow):
     def exit_big_picture(self):
         if self.is_big_picture:
             self.toggle_big_picture()
+
+    def validate_online_license(self):
+        """Valida la licencia online usando el machine_id real."""
+        if self.user_token:
+            try:
+                machine_id = get_machine_id()
+                response = requests.post(
+                    "https://multiverse-server.onrender.com/validate-license",
+                    headers={"Authorization": f"Bearer {self.user_token}"},
+                    json={"machine_id": machine_id}
+                )
+                if response.status_code == 200:
+                    print("✅ Licencia online válida.")
+                else:
+                    print("❌ Licencia online inválida o expirada.")
+            except Exception as e:
+                print(f"⚠️ Error al conectar con el servidor: {e}")

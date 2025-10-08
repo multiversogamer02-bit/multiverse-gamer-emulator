@@ -1,87 +1,81 @@
 # ui/login_window.py
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton,
-    QMessageBox, QHBoxLayout, QCheckBox, QInputDialog
+    QMessageBox, QTabWidget
 )
 from PyQt5.QtCore import Qt
-from core.online_manager import register_user, login_user, request_password_reset
+from core.online_manager import register_user, login_user, save_refresh_token
 
 class LoginWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("馃攼 Iniciar Sesi贸n")
-        self.setFixedSize(400, 350)
+        self.setWindowTitle("?? Iniciar Sesión - Multiverse Gamer")
+        self.resize(400, 300)
         self.token = None
-        self.refresh_token = None
         self.init_ui()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
-        title = QLabel("Multiverse Gamer")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 20px; font-weight: bold; margin-bottom: 20px;")
-        layout.addWidget(title)
-        self.email_input = QLineEdit()
-        self.email_input.setPlaceholderText("Email")
-        layout.addWidget(self.email_input)
-        self.password_input = QLineEdit()
-        self.password_input.setPlaceholderText("Contrase帽a")
-        self.password_input.setEchoMode(QLineEdit.Password)
-        layout.addWidget(self.password_input)
-        
-        # Checkbox "Mantener sesi贸n"
-        self.remember_me = QCheckBox("Mantener sesi贸n iniciada")
-        layout.addWidget(self.remember_me)
-        
-        btn_layout = QHBoxLayout()
-        self.login_btn = QPushButton("Iniciar Sesi贸n")
-        self.login_btn.clicked.connect(self.login)
-        btn_layout.addWidget(self.login_btn)
-        self.register_btn = QPushButton("Crear Cuenta")
-        self.register_btn.clicked.connect(self.register)
-        btn_layout.addWidget(self.register_btn)
-        layout.addLayout(btn_layout)
-        
-        # Bot贸n de recuperaci贸n
-        forgot_btn = QPushButton("驴Olvidaste tu contrase帽a?")
-        forgot_btn.clicked.connect(self.forgot_password)
-        layout.addWidget(forgot_btn)
+        tabs = QTabWidget()
+        self.login_tab = self.create_login_tab()
+        self.register_tab = self.create_register_tab()
+        tabs.addTab(self.login_tab, "Iniciar Sesión")
+        tabs.addTab(self.register_tab, "Crear Cuenta")
+        layout.addWidget(tabs)
 
-    def login(self):
-        email = self.email_input.text().strip()
-        password = self.password_input.text().strip()
+    def create_login_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel("Email:"))
+        self.login_email = QLineEdit()
+        layout.addWidget(self.login_email)
+        layout.addWidget(QLabel("Contrase?a:"))
+        self.login_password = QLineEdit()
+        self.login_password.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.login_password)
+        login_btn = QPushButton("Iniciar Sesión")
+        login_btn.clicked.connect(self.handle_login)
+        layout.addWidget(login_btn)
+        return widget
+
+    def create_register_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(QLabel("Email:"))
+        self.reg_email = QLineEdit()
+        layout.addWidget(self.reg_email)
+        layout.addWidget(QLabel("Contrase?a:"))
+        self.reg_password = QLineEdit()
+        self.reg_password.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.reg_password)
+        reg_btn = QPushButton("Crear Cuenta")
+        reg_btn.clicked.connect(self.handle_register)
+        layout.addWidget(reg_btn)
+        return widget
+
+    def handle_login(self):
+        email = self.login_email.text()
+        password = self.login_password.text()
         if not email or not password:
             QMessageBox.warning(self, "Error", "Completa todos los campos.")
             return
         result = login_user(email, password)
-        if result:
+        if result and "access_token" in result:
             self.token = result["access_token"]
-            self.refresh_token = result["refresh_token"]
-            if self.remember_me.isChecked():
-                from core.online_manager import save_refresh_token
-                save_refresh_token(self.refresh_token)
+            save_refresh_token(result["refresh_token"])
             self.accept()
         else:
-            QMessageBox.critical(self, "Error", "Credenciales inv谩lidas.")
+            QMessageBox.critical(self, "Error", "Credenciales inválidas.")
 
-    def register(self):
-        email = self.email_input.text().strip()
-        password = self.password_input.text().strip()
-        if not email or not password:
-            QMessageBox.warning(self, "Error", "Completa todos los campos.")
+    def handle_register(self):
+        email = self.reg_email.text()
+        password = self.reg_password.text()
+        if not email or not password or len(password) < 6:
+            QMessageBox.warning(self, "Error", "Email válido y contrase?a de 6+ caracteres.")
             return
-        success = register_user(email, password)
-        if success:
-            QMessageBox.information(self, "脡xito", "Cuenta creada. Ahora inicia sesi贸n.")
+        if register_user(email, password):
+            QMessageBox.information(self, "éxito", "Cuenta creada. Ahora inicia sesión.")
+            self.reg_email.clear()
+            self.reg_password.clear()
         else:
-            QMessageBox.critical(self, "Error", "No se pudo crear la cuenta.")
-
-    def forgot_password(self):
-        email, ok = QInputDialog.getText(self, "Recuperar contrase帽a", "Ingresa tu email:")
-        if ok and email:
-            success = request_password_reset(email)
-            if success:
-                QMessageBox.information(self, "脡xito", "Revisa tu email para restablecer la contrase帽a.")
-            else:
-                QMessageBox.warning(self, "Error", "No se pudo enviar el email.")
+            QMessageBox.critical(self, "Error", "El email ya está registrado.")

@@ -1,38 +1,42 @@
 # utils/hardware_detector.py
 import platform
+import psutil
+import subprocess
+import re
 
-def get_hardware_info():
-    info = {
-        "os": platform.system(),
-        "cpu": "No disponible",
-        "gpu": "No disponible",
-        "ram_total_gb": 0
-    }
-    
+def get_gpu_info():
+    system = platform.system()
     try:
-        import psutil
-        info["ram_total_gb"] = round(psutil.virtual_memory().total / (1024**3), 1)
+        if system == "Windows":
+            result = subprocess.run(
+                ["wmic", "path", "win32_VideoController", "get", "name"],
+                capture_output=True, text=True, check=True
+            )
+            lines = result.stdout.strip().split("\n")
+            if len(lines) > 1:
+                return lines[1].strip()
+        elif system == "Linux":
+            result = subprocess.run(
+                ["lspci"], capture_output=True, text=True, check=True
+            )
+            for line in result.stdout.split("\n"):
+                if "VGA" in line or "3D" in line:
+                    return line.split(":")[-1].strip()
+        elif system == "Darwin":
+            result = subprocess.run(
+                ["system_profiler", "SPDisplaysDataType"], capture_output=True, text=True
+            )
+            for line in result.stdout.split("\n"):
+                if "Chip\|GPU" in line or "Vendor" in line:
+                    return line.strip()
     except:
         pass
+    return "Desconocida"
 
-    try:
-        import wmi
-        c = wmi.WMI()
-        # CPU
-        cpus = c.Win32_Processor()
-        if cpus:
-            info["cpu"] = cpus[0].Name.strip()
-        # GPU
-        gpus = c.Win32_VideoController()
-        if gpus:
-            info["gpu"] = gpus[0].Name.strip()
-    except Exception as e:
-        print(f"Error al obtener hardware con WMI: {e}")
-        # Fallback a psutil si WMI falla
-        try:
-            import psutil
-            info["cpu"] = f"{psutil.cpu_count(logical=False)} núcleos"
-        except:
-            pass
-
-    return info
+def get_hardware_info():
+    return {
+        "os": platform.platform(),
+        "cpu": platform.processor() or "Desconocido",
+        "gpu": get_gpu_info(),
+        "ram_total_gb": round(psutil.virtual_memory().total / (1024 ** 3), 1)
+    }
