@@ -9,11 +9,9 @@ from pathlib import Path
 LICENSE_FILE = Path.home() / ".multiverse" / "license.dat"
 
 def get_machine_id():
-    """Genera un ID único basado en hardware del sistema."""
     try:
-        # Componentes estables del sistema
         components = [
-            str(uuid.getnode()),  # MAC address
+            str(uuid.getnode()),
             platform.machine(),
             platform.processor(),
             platform.system(),
@@ -22,7 +20,6 @@ def get_machine_id():
         combined = "".join(components).encode()
         return hashlib.sha256(combined).hexdigest()
     except:
-        # Fallback seguro
         return hashlib.sha256(str(uuid.uuid4()).encode()).hexdigest()
 
 def save_license(expiry_days=30):

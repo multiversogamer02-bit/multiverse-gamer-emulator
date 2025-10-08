@@ -4,7 +4,8 @@ license.dat
 __pycache__/
 *.pyc
 *.log
-
 # Emuladores y BIOS (¡nunca subir a GitHub!)
 emulators/
 bios/
+# Variables de entorno
+.env

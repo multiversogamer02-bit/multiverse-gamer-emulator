@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QGridLayout, QLabel, QPushButton,
     QScrollArea, QVBoxLayout, QHBoxLayout, QMenuBar, QAction, QMessageBox, 
-    QListWidget, QListWidgetItem, QToolButton, QApplication, QInputDialog, QDialog
+    QListWidget, QListWidgetItem, QToolButton, QApplication, QInputDialog
 )
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QPixmap
@@ -27,17 +27,17 @@ class MultiverseMainWindow(QMainWindow):
                 "view": "Vista",
                 "change_theme": "Cambiar Tema",
                 "big_picture": "Modo Big Picture",
-                "config": "Configuración",
+                "config": "Configuracion",
                 "paths_emulators": "Rutas y Emuladores",
                 "user": "Usuario",
                 "subscribe": "Suscribirse",
-                "stats": "Estadísticas",
-                "games_played": "Juegos más jugados",
+                "stats": "Estadisticas",
+                "games_played": "Juegos mas jugados",
                 "total_hours": "Horas totales",
-                "no_games": "No se encontraron juegos.\nConfigura las rutas en 'Configuración'.",
+                "no_games": "No se encontraron juegos.\nConfigura las rutas en 'Configuracion'.",
                 "play": "Jugar",
                 "favorites": "Favoritos",
-                "graphics": "Gráficos",
+                "graphics": "Graficos",
                 "hardware": "Hardware",
                 "view_hardware": "Ver hardware"
             },
@@ -70,7 +70,7 @@ class MultiverseMainWindow(QMainWindow):
         self.user_token = user_token
         self.fps_overlay = FPSOverlay(self)
         if not is_license_valid():
-            print("⚠️ Licencia no válida, pero continuando en modo prueba.")
+            print("⚠️ Licencia no valida, pero continuando en modo prueba.")
         self.theme = apply_theme(QApplication.instance(), self.current_theme)
         self.init_ui()
         scan_games()
@@ -285,7 +285,7 @@ class MultiverseMainWindow(QMainWindow):
         if success:
             QTimer.singleShot(2000, self.fps_overlay.toggle)
         else:
-            QMessageBox.warning(self, "Error", "No se pudo iniciar el juego.\nVerifica las rutas en Configuración.")
+            QMessageBox.warning(self, "Error", "No se pudo iniciar el juego.\nVerifica las rutas en Configuracion.")
 
     def open_settings(self):
         from ui.settings_window import SettingsWindow
@@ -299,7 +299,7 @@ class MultiverseMainWindow(QMainWindow):
             self.load_games()
 
     def open_subscription(self):
-        email, ok = QInputDialog.getText(self, "Suscripción", "Email:")
+        email, ok = QInputDialog.getText(self, "Suscripcion", "Email:")
         if ok and email:
             from ui.subscription_window import SubscriptionWindow
             sub_window = SubscriptionWindow(email, self)
@@ -319,7 +319,7 @@ class MultiverseMainWindow(QMainWindow):
         <b>GPU:</b> {info['gpu']}<br>
         <b>RAM:</b> {info['ram_total_gb']} GB
         """
-        QMessageBox.information(self, "💻 Información de Hardware", message)
+        QMessageBox.information(self, "💻 Informacion de Hardware", message)
 
     def open_graphics_settings(self, game_id):
         import sqlite3
@@ -339,7 +339,7 @@ class MultiverseMainWindow(QMainWindow):
             cursor.execute("UPDATE games SET graphics_profile = ? WHERE id = ?", (json.dumps(new_profile), game_id))
             conn.commit()
             conn.close()
-            QMessageBox.information(self, "Éxito", "Configuración gráfica guardada.")
+            QMessageBox.information(self, "Exito", "Configuracion grafica guardada.")
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape and self.is_big_picture:
@@ -389,8 +389,8 @@ class MultiverseMainWindow(QMainWindow):
                     json={"machine_id": machine_id}
                 )
                 if response.status_code == 200:
-                    print("✅ Licencia online válida.")
+                    print("✅ Licencia online valida.")
                 else:
-                    print("❌ Licencia online inválida o expirada.")
+                    print("❌ Licencia online invalida o expirada.")
             except Exception as e:
                 print(f"⚠️ Error al conectar con el servidor: {e}")

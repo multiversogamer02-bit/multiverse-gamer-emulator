@@ -1,18 +1,18 @@
 # core/online_manager.py
 import requests
 import os
-import jwt
-from cryptography.fernet import Fernet
 from utils.license_manager import get_machine_id
+from cryptography.fernet import Fernet
+from pathlib import Path
 
 SERVER_URL = "https://multiverse-server.onrender.com"
-TOKEN_PATH = os.path.expanduser("~/.multiverse/refresh.token")
-KEY_PATH = os.path.expanduser("~/.multiverse/crypto.key")
+TOKEN_PATH = Path.home() / ".multiverse" / "refresh.token"
+KEY_PATH = Path.home() / ".multiverse" / "crypto.key"
 
 def _get_crypto_key():
-    if not os.path.exists(KEY_PATH):
+    if not KEY_PATH.exists():
         key = Fernet.generate_key()
-        os.makedirs(os.path.dirname(KEY_PATH), exist_ok=True)
+        KEY_PATH.parent.mkdir(exist_ok=True)
         with open(KEY_PATH, "wb") as f:
             f.write(key)
     else:
@@ -24,12 +24,12 @@ def save_refresh_token(token: str):
     key = _get_crypto_key()
     fernet = Fernet(key)
     encrypted = fernet.encrypt(token.encode())
-    os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
+    TOKEN_PATH.parent.mkdir(exist_ok=True)
     with open(TOKEN_PATH, "wb") as f:
         f.write(encrypted)
 
 def load_refresh_token() -> str:
-    if not os.path.exists(TOKEN_PATH):
+    if not TOKEN_PATH.exists():
         return None
     try:
         key = _get_crypto_key()
@@ -77,7 +77,7 @@ def validate_license_online(token: str) -> bool:
 
 def get_user_role(token: str) -> str:
     try:
-        # Verificar firma con clave secreta del servidor (simulado)
+        import jwt
         SECRET_KEY = os.getenv("JWT_SECRET", "fallback_inseguro")
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         email = payload.get("sub")

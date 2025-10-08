@@ -15,8 +15,8 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
-    plan = Column(String)  # "mensual", "trimestral", "anual"
-    status = Column(String, default="active")  # "active", "canceled", "expired"
+    plan = Column(String)
+    status = Column(String, default="active")
     start_date = Column(DateTime, default=datetime.utcnow)
     end_date = Column(DateTime)
 
@@ -26,7 +26,7 @@ class License(Base):
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
     machine_id = Column(String, index=True)
     plan = Column(String)
-    valid_until = Column(DateTime)
+    valid_until = Column(DateTime(timezone=True))
     is_active = Column(Boolean, default=True)
 
 class PasswordResetToken(Base):

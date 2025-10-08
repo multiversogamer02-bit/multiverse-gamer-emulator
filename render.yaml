@@ -1,11 +1,12 @@
-# render.yaml
 services:
   - type: web
     name: multiverse-server
     env: python
     region: oregon
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "bash deploy.sh"  # ← Usa el script
+    startCommand: |
+      alembic upgrade head &&
+      uvicorn server.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.13.4"
@@ -22,5 +23,7 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: SENDGRID_API_KEY
+        sync: false
+      - key: SENDGRID_FROM_EMAIL
         sync: false
     healthCheckPath: /healthz

@@ -24,16 +24,14 @@ class SubscriptionWindow(QDialog):
         layout.addWidget(QLabel(f"Email: {self.email}"))
         layout.addWidget(QLabel("Selecciona un plan:"))
 
-        # Selector de método de pago
         method_layout = QHBoxLayout()
-        method_layout.addWidget(QLabel("Método de pago:"))
+        method_layout.addWidget(QLabel("Metodo de pago:"))
         self.method_combo = QComboBox()
         self.method_combo.addItems(["Mercado Pago", "PayPal"])
         self.method_combo.currentIndexChanged.connect(self.on_payment_method_changed)
         method_layout.addWidget(self.method_combo)
         layout.addLayout(method_layout)
 
-        # Botones de planes
         monthly_btn = QPushButton("Mensual - $10.000 ARS")
         monthly_btn.clicked.connect(lambda: self.select_plan("mensual"))
         layout.addWidget(monthly_btn)
@@ -46,7 +44,6 @@ class SubscriptionWindow(QDialog):
         anual_btn.clicked.connect(lambda: self.select_plan("anual"))
         layout.addWidget(anual_btn)
 
-        # Botón de activación manual (por si el pago ya se hizo)
         activate_btn = QPushButton("✅ Activar licencia (si ya pagaste)")
         activate_btn.clicked.connect(self.activate_existing_license)
         layout.addWidget(activate_btn)
@@ -66,8 +63,8 @@ class SubscriptionWindow(QDialog):
                 QMessageBox.information(
                     self, 
                     "Pago iniciado", 
-                    "Se abrió el navegador para completar el pago.\n\n"
-                    "⚠️ Después de aprobar el pago, regresa aquí y haz clic en 'Activar licencia'."
+                    "Se abrio el navegador para completar el pago.\n\n"
+                    "⚠️ Despues de aprobar el pago, regresa aqui y haz clic en 'Activar licencia'."
                 )
                 self.accept()
             else:
@@ -76,14 +73,13 @@ class SubscriptionWindow(QDialog):
             QMessageBox.critical(self, "Error", f"No se pudo iniciar el pago: {str(e)}")
 
     def activate_existing_license(self):
-        """Activa la licencia llamando a /license/activate con el machine_id real."""
         if not self.parent_window or not self.parent_window.user_token:
-            QMessageBox.warning(self, "Error", "Debes iniciar sesión primero.")
+            QMessageBox.warning(self, "Error", "Debes iniciar sesion primero.")
             return
 
         token = self.parent_window.user_token
         machine_id = get_machine_id()
-        plan = self.selected_plan or "mensual"  # Usa el último plan seleccionado o por defecto
+        plan = self.selected_plan or "mensual"
 
         try:
             response = requests.post(
@@ -93,12 +89,11 @@ class SubscriptionWindow(QDialog):
                 timeout=10
             )
             if response.status_code == 200:
-                QMessageBox.information(self, "✅ Éxito", "¡Licencia activada correctamente!\nYa puedes jugar.")
-                # Recargar validación en la ventana principal
+                QMessageBox.information(self, "✅ Exito", "¡Licencia activada correctamente!\nYa puedes jugar.")
                 if self.parent_window:
                     self.parent_window.validate_online_license()
             else:
                 error_msg = response.json().get("detail", "Error desconocido")
                 QMessageBox.critical(self, "❌ Error", f"No se pudo activar la licencia:\n{error_msg}")
         except Exception as e:
-            QMessageBox.critical(self, "❌ Error", f"Error de conexión:\n{str(e)}")
+            QMessageBox.critical(self, "❌ Error", f"Error de conexion:\n{str(e)}")

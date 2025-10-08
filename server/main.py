@@ -14,7 +14,6 @@ import hmac
 import hashlib
 import httpx
 
-# 👇 Validación de variables de entorno al iniciar
 def validate_env():
     required = ["SECRET_KEY", "MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "DATABASE_URL"]
     missing = [var for var in required if not os.getenv(var)]
@@ -25,7 +24,6 @@ def validate_env():
 validate_env()
 
 app = FastAPI(title="Multiverse Gamer API")
-
 models.Base.metadata.create_all(bind=database.engine)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -134,7 +132,7 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+        raise HTTPException(status_code=401, detail="Credenciales invalidas")
     access_token = create_access_token(data={"sub": user.email})
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
@@ -144,23 +142,23 @@ def refresh_token(refresh_token: str = Form(...), db: Session = Depends(get_db))
     try:
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Token inválido")
+            raise HTTPException(status_code=401, detail="Token invalido")
         email = payload.get("sub")
         if not email:
-            raise HTTPException(status_code=401, detail="Token inválido")
+            raise HTTPException(status_code=401, detail="Token invalido")
         user = get_user(db, email)
         if not user:
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
         new_access_token = create_access_token(data={"sub": email})
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
-        raise HTTPException(status_code=401, detail="Token expirado o inválido")
+        raise HTTPException(status_code=401, detail="Token expirado o invalido")
 
 @app.post("/auth/forgot-password")
 def forgot_password(email: str = Form(...), db: Session = Depends(get_db)):
     user = get_user(db, email)
     if not user:
-        return {"msg": "Si el email es válido, recibirás un enlace."}
+        return {"msg": "Si el email es valido, recibiras un enlace."}
     
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -179,16 +177,15 @@ def reset_password(token: str = Form(...), new_password: str = Form(...), db: Se
         models.PasswordResetToken.expires_at > datetime.now(timezone.utc)
     ).first()
     if not reset_token:
-        raise HTTPException(status_code=400, detail="Token inválido o expirado")
+        raise HTTPException(status_code=400, detail="Token invalido o expirado")
     
     user = get_user(db, reset_token.email)
     if user:
         user.hashed_password = get_password_hash(new_password)
         db.delete(reset_token)
         db.commit()
-    return {"msg": "Contraseña actualizada."}
+    return {"msg": "Contrasena actualizada."}
 
-# 👇 CORREGIDO: recibe JSON
 @app.post("/validate-license")
 def validate_license(
     request: LicenseValidateRequest,
@@ -201,24 +198,22 @@ def validate_license(
         models.License.is_active == True
     ).first()
     if not license or datetime.now(timezone.utc) > license.valid_until:
-        raise HTTPException(status_code=403, detail="Licencia inválida")
+        raise HTTPException(status_code=403, detail="Licencia invalida")
     return {"status": "valid", "expires": license.valid_until.isoformat()}
 
-# 👇 NUEVO: activar licencia con machine_id real
 @app.post("/license/activate")
 def activate_license(
     request: LicenseActivateRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Verificar que el usuario tenga una suscripción activa
     subscription = db.query(models.Subscription).filter(
         models.Subscription.user_id == current_user.id,
         models.Subscription.status == "active",
         models.Subscription.end_date > datetime.now(timezone.utc)
     ).first()
     if not subscription:
-        raise HTTPException(status_code=403, detail="No tienes suscripción activa")
+        raise HTTPException(status_code=403, detail="No tienes suscripcion activa")
     
     new_license = models.License(
         user_id=current_user.id,
@@ -231,7 +226,6 @@ def activate_license(
     db.commit()
     return {"status": "activated", "expires": new_license.valid_until.isoformat()}
 
-# 👇 ELIMINADO: ya no se crea licencia aquí
 @app.get("/payment/success")
 def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
     user = get_user(db, email)
@@ -245,7 +239,7 @@ def payment_failure():
 
 @app.get("/payment/pending")
 def payment_pending():
-    return {"message": "Pago pendiente de confirmación."}
+    return {"message": "Pago pendiente de confirmacion."}
 
 @app.post("/payment/mercadopago")
 def mercadopago_payment(payment: PaymentRequest, db: Session = Depends(get_db)):
@@ -276,7 +270,6 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "is_admin": u.is_admin
     } for u in users]
 
-# 👇 WEBHOOK DE MERCADO PAGO (solo marca pago aprobado)
 @app.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("x-signature")
@@ -301,7 +294,7 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
     hmac_hash = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
 
     if not hmac.compare_digest(hmac_hash, v1):
-        raise HTTPException(status_code=403, detail="Firma inválida")
+        raise HTTPException(status_code=403, detail="Firma invalida")
     
     try:
         payload = await request.json()
@@ -309,7 +302,7 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
         data_id = payload.get("data", {}).get("id")
         
         if not action or not data_id:
-            raise HTTPException(status_code=400, detail="Payload inválido")
+            raise HTTPException(status_code=400, detail="Payload invalido")
         
         mp_access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
         if not mp_access_token:
@@ -332,13 +325,11 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
         if status == "approved" and email:
             user = get_user(db, email)
             if not user:
-                # Opcional: crear usuario si no existe
                 hashed = get_password_hash(secrets.token_urlsafe(16))
                 user = models.User(email=email, hashed_password=hashed)
                 db.add(user)
                 db.commit()
             
-            # Crear suscripción (NO licencia)
             subscription = models.Subscription(
                 user_id=user.id,
                 plan=plan,
@@ -360,7 +351,7 @@ def reset_password_page(token: str):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Restablecer Contraseña - Multiverse Gamer</title>
+        <title>Restablecer Contrasena - Multiverse Gamer</title>
         <meta charset="utf-8">
         <style>
             body {{ font-family: Arial, sans-serif; background: #1e1e1e; color: white; text-align: center; padding: 50px; }}
@@ -372,10 +363,10 @@ def reset_password_page(token: str):
     </head>
     <body>
         <div class="container">
-            <h2>🔒 Restablecer Contraseña</h2>
+            <h2>🔒 Restablecer Contrasena</h2>
             <form id="resetForm" method="POST" action="/auth/reset-password">
                 <input type="hidden" name="token" value="{token}">
-                <input type="password" name="new_password" placeholder="Nueva contraseña" required>
+                <input type="password" name="new_password" placeholder="Nueva contrasena" required>
                 <button type="submit">Restablecer</button>
             </form>
         </div>
