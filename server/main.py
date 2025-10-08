@@ -2,7 +2,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 from jose import jwt, JWTError
 from pydantic import BaseModel
 from server import models, database
@@ -215,11 +215,12 @@ def activate_license(
     if not subscription:
         raise HTTPException(status_code=403, detail="No tienes suscripcion activa")
     
+    valid_until = datetime.now(timezone.utc) + timedelta(days=30)
     new_license = models.License(
-        user_id=current_user.id,
-        machine_id=request.machine_id,
-        plan=request.plan,
-        valid_until=datetime.now(timezone.utc) + timedelta(days=30),
+        user_id=user.id,
+        machine_id=machine_id,
+        plan=plan,
+        valid_until=valid_until,  # ← ya tiene timezone
         is_active=True
     )
     db.add(new_license)

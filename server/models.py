@@ -1,5 +1,5 @@
 # server/models.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from .database import Base
 from datetime import datetime
 
@@ -23,10 +23,10 @@ class Subscription(Base):
 class License(Base):
     __tablename__ = "licenses"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    user_id = Column(Integer, index=True)
     machine_id = Column(String, index=True)
     plan = Column(String)
-    valid_until = Column(DateTime(timezone=True))
+    valid_until = Column(DateTime(timezone=True))  # ← ¡timezone=True es clave!
     is_active = Column(Boolean, default=True)
 
 class PasswordResetToken(Base):

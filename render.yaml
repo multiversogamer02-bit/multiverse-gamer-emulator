@@ -8,19 +8,13 @@ services:
       alembic upgrade head &&
       uvicorn server.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.13.4"
+      - key: DATABASE_URL
+        value: postgresql://multiverse_db_user:WdjaX02gEgg2n1eKEvI9rm8duFh0BjEq@dpg-d3ej318gjchc738pnd3g-a.oregon-postgres.render.com/multiverse_db
       - key: SECRET_KEY
         sync: false
       - key: MERCADOPAGO_ACCESS_TOKEN
         sync: false
       - key: MERCADOPAGO_WEBHOOK_SECRET
-        sync: false
-      - key: PAYPAL_CLIENT_ID
-        sync: false
-      - key: PAYPAL_CLIENT_SECRET
-        sync: false
-      - key: DATABASE_URL
         sync: false
       - key: SENDGRID_API_KEY
         sync: false
