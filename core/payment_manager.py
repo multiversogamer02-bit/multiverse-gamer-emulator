@@ -9,13 +9,9 @@ load_dotenv()
 def create_mercadopago_payment(email: str, plan: str) -> str:
     access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
     if not access_token or not access_token.startswith("APP_USR-"):
-        raise Exception("MERCADOPAGO_ACCESS_TOKEN no está configurado para producción")
+        raise Exception("MERCADOPAGO_ACCESS_TOKEN debe ser de producción (APP_USR-...)")
     
-    prices = {
-        "mensual": 10000,
-        "trimestral": 27000,
-        "anual": 96000
-    }
+    prices = {"mensual": 10000, "trimestral": 27000, "anual": 96000}
     amount = prices.get(plan, 10000)
 
     sdk = mercadopago.SDK(access_token)
@@ -23,11 +19,10 @@ def create_mercadopago_payment(email: str, plan: str) -> str:
     payment_data = {
         "transaction_amount": float(amount),
         "description": f"Suscripción {plan} - Multiverse Gamer",
-        "payment_method_id": "visa",  # Opcional: se detecta automáticamente
-        "payer": {
-            "email": email
-        },
+        "payment_method_id": "visa",
+        "payer": {"email": email},
         "binary_mode": True,
+        # ❌ ELIMINADO: "auto_return": "approved",
         "back_urls": {
             "success": f"https://multiverse-server.onrender.com/payment/success?email={email}&plan={plan}",
             "failure": "https://multiverse-server.onrender.com/payment/failure",
@@ -48,7 +43,10 @@ def create_paypal_payment(email: str, plan: str) -> str:
     if not client_id or not client_secret:
         raise Exception("Faltan credenciales de PayPal para producción")
 
+    # ✅ URLs de producción (sin sandbox)
     auth_url = "https://api.paypal.com/v1/oauth2/token"
+    order_url = "https://api.paypal.com/v2/checkout/orders"
+
     auth = (client_id, client_secret)
     token_data = {"grant_type": "client_credentials"}
     token_resp = requests.post(auth_url, auth=auth, data=token_data)
@@ -59,7 +57,6 @@ def create_paypal_payment(email: str, plan: str) -> str:
     prices = {"mensual": 10000, "trimestral": 27000, "anual": 96000}
     amount = prices.get(plan, 10000)
 
-    order_url = "https://api.paypal.com/v2/checkout/orders"
     order_data = {
         "intent": "CAPTURE",
         "purchase_units": [{
@@ -71,10 +68,7 @@ def create_paypal_payment(email: str, plan: str) -> str:
             "cancel_url": "https://multiverse-server.onrender.com/payment/failure"
         }
     }
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     order_resp = requests.post(order_url, json=order_data, headers=headers)
     
     if order_resp.status_code != 201:
