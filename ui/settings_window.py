@@ -26,7 +26,8 @@ class SettingsWindow(QDialog):
                 "success_trial": "Licencia de prueba activada por 30 días.",
                 "error_trial": "No se pudo activar la licencia:\n{error}",
                 "roms_not_exist": "La carpeta de ROMs no existe: {path}",
-                "emulator_not_exist": "El emulador no existe: {path}"
+                "emulator_not_exist": "El emulador no existe: {path}",
+                "terms_btn": "Ver Términos de Uso"
             },
             "en": {
                 "window_title": "Emulator Settings",
@@ -41,7 +42,8 @@ class SettingsWindow(QDialog):
                 "success_trial": "Trial license activated for 30 days.",
                 "error_trial": "Could not activate license:\n{error}",
                 "roms_not_exist": "ROMs folder does not exist: {path}",
-                "emulator_not_exist": "Emulator does not exist: {path}"
+                "emulator_not_exist": "Emulator does not exist: {path}",
+                "terms_btn": "View Terms of Use"
             }
         }
         self.setWindowTitle(self.tr("window_title"))
@@ -57,7 +59,8 @@ class SettingsWindow(QDialog):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-
+        
+        # Tema
         theme_layout = QGridLayout()
         theme_layout.addWidget(QLabel(f"<b>{self.tr('theme_label')}</b>"), 0, 0)
         self.theme_combo = QComboBox()
@@ -67,6 +70,7 @@ class SettingsWindow(QDialog):
         theme_layout.addWidget(self.theme_combo, 0, 1, 1, 2)
         layout.addLayout(theme_layout)
 
+        # Idioma
         lang_layout = QGridLayout()
         lang_layout.addWidget(QLabel("<b>Idioma / Language:</b>"), 0, 0)
         self.lang_combo = QComboBox()
@@ -75,14 +79,22 @@ class SettingsWindow(QDialog):
         lang_layout.addWidget(self.lang_combo, 0, 1, 1, 2)
         layout.addLayout(lang_layout)
 
+        # Botón de licencia de prueba
         license_btn = QPushButton(self.tr("trial_btn"))
         license_btn.clicked.connect(self.activate_trial)
         layout.addWidget(license_btn)
 
+        # Botón de Términos de Uso
+        terms_btn = QPushButton(self.tr("terms_btn"))
+        terms_btn.clicked.connect(self.show_terms)
+        layout.addWidget(terms_btn)
+
+        # Separador
         sep = QLabel()
         sep.setFixedHeight(20)
         layout.addWidget(sep)
 
+        # Configuración de consolas
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
@@ -90,6 +102,7 @@ class SettingsWindow(QDialog):
         scroll.setWidget(content)
         layout.addWidget(scroll)
 
+        # Botón de guardar
         self.save_btn = QPushButton(self.tr("save_btn"))
         self.save_btn.clicked.connect(self.save_settings)
         layout.addWidget(self.save_btn)
@@ -162,18 +175,15 @@ class SettingsWindow(QDialog):
             for console_id, fields in self.fields.items():
                 roms_path = fields["roms"].text().strip()
                 emulator_path = fields["emulator"].text().strip()
-
                 if roms_path and not os.path.exists(roms_path):
                     raise ValueError(self.tr("roms_not_exist").format(path=roms_path))
                 if emulator_path and not os.path.exists(emulator_path):
                     raise ValueError(self.tr("emulator_not_exist").format(path=emulator_path))
-
                 cursor.execute("""
                     UPDATE consoles 
                     SET roms_path = ?, emulator_path = ? 
                     WHERE id = ?
                 """, (roms_path, emulator_path, console_id))
-
             conn.commit()
             QMessageBox.information(self, "Éxito", self.tr("success_save"))
             self.selected_lang = "es" if self.lang_combo.currentIndex() == 0 else "en"
@@ -191,3 +201,21 @@ class SettingsWindow(QDialog):
             QMessageBox.information(self, "Éxito", self.tr("success_trial"))
         except Exception as e:
             QMessageBox.critical(self, "Error", self.tr("error_trial").format(error=str(e)))
+
+    def show_terms(self):
+        from PyQt5.QtWidgets import QTextBrowser
+        terms_window = QDialog(self)
+        terms_window.setWindowTitle("📜 " + self.tr("terms_btn"))
+        terms_window.resize(600, 500)
+        layout = QVBoxLayout(terms_window)
+        browser = QTextBrowser()
+        try:
+            with open("TERMS.md", "r", encoding="utf-8") as f:
+                browser.setMarkdown(f.read())
+        except:
+            browser.setPlainText("No se pudo cargar el archivo de términos.")
+        layout.addWidget(browser)
+        close_btn = QPushButton("Cerrar")
+        close_btn.clicked.connect(terms_window.accept)
+        layout.addWidget(close_btn)
+        terms_window.exec_()
