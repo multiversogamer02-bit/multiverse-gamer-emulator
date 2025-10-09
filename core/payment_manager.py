@@ -1,38 +1,39 @@
 # core/payment_manager.py
 import mercadopago
+import requests
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-def create_mercadopago_payment(email: str, plan: str) -> str:
+def create_mercadopago_subscription(email: str, plan: str) -> str:
+    """
+    Crea una SUSCRIPCIÓN RECURRENTE en Mercado Pago (no un pago único).
+    """
     access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
     if not access_token or not access_token.startswith("APP_USR-"):
         raise Exception("MERCADOPAGO_ACCESS_TOKEN debe ser de producción (APP_USR-...)")
     
+    # Precios en ARS
     prices = {"mensual": 10000, "trimestral": 27000, "anual": 96000}
     amount = prices.get(plan, 10000)
+    frequency = {"mensual": 1, "trimestral": 3, "anual": 12}.get(plan, 1)
 
     sdk = mercadopago.SDK(access_token)
 
-    payment_data = {
-        "items": [{
-            "title": f"Suscripción {plan} - Multiverse Gamer",
-            "quantity": 1,
-            "unit_price": float(amount),
+    subscription_data = {
+        "payer_email": email,
+        "back_url": "https://multiverse-server.onrender.com/payment/success?email={email}&plan={plan}".format(email=email, plan=plan),
+        "auto_recurring": {
+            "frequency": frequency,
+            "frequency_type": "months",
+            "transaction_amount": float(amount),
             "currency_id": "ARS"
-        }],
-        "payer": {"email": email},
-        "back_urls": {
-            "success": f"https://multiverse-server.onrender.com/payment/success?email={email}&plan={plan}",
-            "failure": "https://multiverse-server.onrender.com/payment/failure",
-            "pending": "https://multiverse-server.onrender.com/payment/pending"
         },
-        "auto_return": "approved",  # ← Sí se permite en preference
-        "binary_mode": True
+        "reason": f"Suscripción {plan} - Multiverse Gamer"
     }
 
-    result = sdk.preference().create(payment_data)  # ← ¡CAMBIO CLAVE!
+    result = sdk.subscription().create(subscription_data)
     if result["status"] == 201:
         return result["response"]["init_point"]
     else:
@@ -45,6 +46,7 @@ def create_paypal_payment(email: str, plan: str) -> str:
     if not client_id or not client_secret:
         raise Exception("Faltan credenciales de PayPal para producción")
 
+    # URLs de producción (sin sandbox)
     auth_url = "https://api.paypal.com/v1/oauth2/token"
     order_url = "https://api.paypal.com/v2/checkout/orders"
 
