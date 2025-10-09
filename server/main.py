@@ -2,7 +2,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Form, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from pydantic import BaseModel
 from server import models, database
@@ -14,19 +14,10 @@ import hmac
 import hashlib
 import httpx
 
-def validate_env():
-    required = ["SECRET_KEY", "MERCADOPAGO_ACCESS_TOKEN", "MERCADOPAGO_WEBHOOK_SECRET", "DATABASE_URL"]
-    missing = [var for var in required if not os.getenv(var)]
-    if missing:
-        raise EnvironmentError(f"❌ Variables faltantes: {', '.join(missing)}")
-    if not os.getenv("DATABASE_URL", "").startswith("postgresql"):
-        print("⚠️  DATABASE_URL no es PostgreSQL. ¿Estás en desarrollo?")
-validate_env()
-
 app = FastAPI(title="Multiverse Gamer API")
 models.Base.metadata.create_all(bind=database.engine)
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "fallback_inseguro_para_desarrollo")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 30
@@ -46,10 +37,6 @@ class PaymentRequest(BaseModel):
 
 class LicenseValidateRequest(BaseModel):
     machine_id: str
-
-class LicenseActivateRequest(BaseModel):
-    machine_id: str
-    plan: str
 
 def get_db():
     db = database.SessionLocal()
@@ -110,10 +97,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
-@app.get("/healthz")
-def health_check():
-    return {"status": "ok"}
-
 @app.get("/")
 def read_root():
     return {"message": "Multiverse Gamer API - Funcionando"}
@@ -132,7 +115,7 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Credenciales invalidas")
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
     access_token = create_access_token(data={"sub": user.email})
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
@@ -142,30 +125,28 @@ def refresh_token(refresh_token: str = Form(...), db: Session = Depends(get_db))
     try:
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Token invalido")
+            raise HTTPException(status_code=401, detail="Token inválido")
         email = payload.get("sub")
         if not email:
-            raise HTTPException(status_code=401, detail="Token invalido")
+            raise HTTPException(status_code=401, detail="Token inválido")
         user = get_user(db, email)
         if not user:
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
         new_access_token = create_access_token(data={"sub": email})
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
-        raise HTTPException(status_code=401, detail="Token expirado o invalido")
+        raise HTTPException(status_code=401, detail="Token expirado o inválido")
 
 @app.post("/auth/forgot-password")
 def forgot_password(email: str = Form(...), db: Session = Depends(get_db)):
     user = get_user(db, email)
     if not user:
-        return {"msg": "Si el email es valido, recibiras un enlace."}
-    
+        return {"msg": "Si el email es válido, recibirás un enlace."}
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
     reset_token = models.PasswordResetToken(email=email, token=token, expires_at=expires_at)
     db.add(reset_token)
     db.commit()
-    
     reset_url = f"https://multiverse-server.onrender.com/auth/reset?token={token}"
     send_password_reset_email(email, token)
     return {"msg": "Email enviado."}
@@ -177,15 +158,15 @@ def reset_password(token: str = Form(...), new_password: str = Form(...), db: Se
         models.PasswordResetToken.expires_at > datetime.now(timezone.utc)
     ).first()
     if not reset_token:
-        raise HTTPException(status_code=400, detail="Token invalido o expirado")
-    
+        raise HTTPException(status_code=400, detail="Token inválido o expirado")
     user = get_user(db, reset_token.email)
     if user:
         user.hashed_password = get_password_hash(new_password)
         db.delete(reset_token)
         db.commit()
-    return {"msg": "Contrasena actualizada."}
+    return {"msg": "Contraseña actualizada."}
 
+# 👇 CORREGIDO: recibe JSON
 @app.post("/validate-license")
 def validate_license(
     request: LicenseValidateRequest,
@@ -198,34 +179,8 @@ def validate_license(
         models.License.is_active == True
     ).first()
     if not license or datetime.now(timezone.utc) > license.valid_until:
-        raise HTTPException(status_code=403, detail="Licencia invalida")
+        raise HTTPException(status_code=403, detail="Licencia inválida")
     return {"status": "valid", "expires": license.valid_until.isoformat()}
-
-@app.post("/license/activate")
-def activate_license(
-    request: LicenseActivateRequest,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    subscription = db.query(models.Subscription).filter(
-        models.Subscription.user_id == current_user.id,
-        models.Subscription.status == "active",
-        models.Subscription.end_date > datetime.now(timezone.utc)
-    ).first()
-    if not subscription:
-        raise HTTPException(status_code=403, detail="No tienes suscripcion activa")
-    
-    valid_until = datetime.now(timezone.utc) + timedelta(days=30)
-    new_license = models.License(
-        user_id=user.id,
-        machine_id=machine_id,
-        plan=plan,
-        valid_until=valid_until,  # ← ya tiene timezone
-        is_active=True
-    )
-    db.add(new_license)
-    db.commit()
-    return {"status": "activated", "expires": new_license.valid_until.isoformat()}
 
 @app.get("/payment/success")
 def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
@@ -240,7 +195,7 @@ def payment_failure():
 
 @app.get("/payment/pending")
 def payment_pending():
-    return {"message": "Pago pendiente de confirmacion."}
+    return {"message": "Pago pendiente de confirmación."}
 
 @app.post("/payment/mercadopago")
 def mercadopago_payment(payment: PaymentRequest, db: Session = Depends(get_db)):
@@ -271,58 +226,46 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "is_admin": u.is_admin
     } for u in users]
 
+# 👇 WEBHOOK DE MERCADO PAGO (sin crear licencia aquí)
 @app.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("x-signature")
     if not signature:
         raise HTTPException(status_code=400, detail="Firma ausente")
-
     data = await request.body()
     data_str = data.decode("utf-8")
-
     sig_parts = dict(part.split("=") for part in signature.split(","))
     ts = sig_parts.get("ts")
     v1 = sig_parts.get("v1")
-
     if not ts or not v1:
         raise HTTPException(status_code=400, detail="Firma mal formada")
-
     message = f"{ts}{data_str}"
     secret = os.getenv("MERCADOPAGO_WEBHOOK_SECRET")
     if not secret:
         raise HTTPException(status_code=500, detail="Falta MERCADOPAGO_WEBHOOK_SECRET")
-
     hmac_hash = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
-
     if not hmac.compare_digest(hmac_hash, v1):
-        raise HTTPException(status_code=403, detail="Firma invalida")
-    
+        raise HTTPException(status_code=403, detail="Firma inválida")
     try:
         payload = await request.json()
         action = payload.get("action")
         data_id = payload.get("data", {}).get("id")
-        
         if not action or not data_id:
-            raise HTTPException(status_code=400, detail="Payload invalido")
-        
+            raise HTTPException(status_code=400, detail="Payload inválido")
         mp_access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
         if not mp_access_token:
             raise HTTPException(status_code=500, detail="Falta MERCADOPAGO_ACCESS_TOKEN")
-        
         async with httpx.AsyncClient() as client:
             payment_resp = await client.get(
                 f"https://api.mercadopago.com/v1/payments/{data_id}",
                 headers={"Authorization": f"Bearer {mp_access_token}"}
             )
-            
         if payment_resp.status_code != 200:
             raise HTTPException(status_code=400, detail="No se pudo obtener el pago")
-        
         payment_data = payment_resp.json()
         status = payment_data.get("status")
         email = payment_data.get("payer", {}).get("email")
         plan = "mensual"
-        
         if status == "approved" and email:
             user = get_user(db, email)
             if not user:
@@ -330,19 +273,9 @@ async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
                 user = models.User(email=email, hashed_password=hashed)
                 db.add(user)
                 db.commit()
-            
-            subscription = models.Subscription(
-                user_id=user.id,
-                plan=plan,
-                status="active",
-                end_date=datetime.now(timezone.utc) + timedelta(days=30)
-            )
-            db.add(subscription)
-            db.commit()
-            return {"status": "suscripcion_activada"}
-        
+            # Solo marca pago aprobado → licencia se crea en /license/activate
+            return {"status": "pago_aprobado"}
         return {"status": "evento_procesado", "payment_status": status}
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error procesando webhook: {str(e)}")
 
@@ -352,7 +285,7 @@ def reset_password_page(token: str):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Restablecer Contrasena - Multiverse Gamer</title>
+        <title>Restablecer Contraseña - Multiverse Gamer</title>
         <meta charset="utf-8">
         <style>
             body {{ font-family: Arial, sans-serif; background: #1e1e1e; color: white; text-align: center; padding: 50px; }}
@@ -364,10 +297,10 @@ def reset_password_page(token: str):
     </head>
     <body>
         <div class="container">
-            <h2>🔒 Restablecer Contrasena</h2>
+            <h2>🔒 Restablecer Contraseña</h2>
             <form id="resetForm" method="POST" action="/auth/reset-password">
                 <input type="hidden" name="token" value="{token}">
-                <input type="password" name="new_password" placeholder="Nueva contrasena" required>
+                <input type="password" name="new_password" placeholder="Nueva contraseña" required>
                 <button type="submit">Restablecer</button>
             </form>
         </div>
