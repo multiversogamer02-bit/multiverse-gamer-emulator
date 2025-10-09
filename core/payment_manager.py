@@ -23,7 +23,7 @@ def create_mercadopago_payment(email: str, plan: str) -> str:
     payment_data = {
         "transaction_amount": float(amount),
         "description": f"Suscripción {plan} - Multiverse Gamer",
-        "payment_method_id": "visa",
+        "payment_method_id": "visa",  # Opcional: se detecta automáticamente
         "payer": {
             "email": email
         },
