@@ -1,18 +1,25 @@
 # core/online_manager.py
+"""
+Gestiona la comunicación con el servidor backend para autenticación,
+licencias, pagos y usuarios.
+"""
+
 import requests
 import os
+# 👇 Importa load_dotenv para cargar variables desde .env
+from dotenv import load_dotenv
 from utils.license_manager import get_machine_id
 from cryptography.fernet import Fernet, InvalidToken
 import base64
-from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env (solo en desarrollo local)
+# Esto permite que FERNET_KEY se lea desde el archivo .env si existe.
 load_dotenv()
 
 SERVER_URL = "https://multiverse-server.onrender.com"
 
 def _get_fernet_key():
-    """Obtiene y valida la clave Fernet desde la variable de entorno o .env."""
+    """Obtiene y valida la clave FERNET_KEY desde las variables de entorno."""
     key_b64 = os.getenv('FERNET_KEY')
     if not key_b64:
         raise ValueError(
@@ -30,6 +37,7 @@ def _get_fernet_key():
         raise ValueError(f"La FERNET_KEY proporcionada no es válida: {e}")
 
 def register_user(email: str, password: str) -> bool:
+    """Registra un nuevo usuario en el servidor."""
     try:
         response = requests.post(
             f"{SERVER_URL}/register",
@@ -42,7 +50,9 @@ def register_user(email: str, password: str) -> bool:
         return False
 
 def login_user(email: str, password: str) -> dict:
+    """Inicia sesión de un usuario y obtiene tokens."""
     try:
+        # Usar 'data' para enviar application/x-www-form-urlencoded
         response = requests.post(
             f"{SERVER_URL}/token",
             data={"username": email, "password": password},
@@ -51,16 +61,14 @@ def login_user(email: str, password: str) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            # Opcional: loguear el mensaje de error del servidor
-            # error_msg = response.json().get('detail', 'Error desconocido')
-            # print(f"Error de login: {error_msg}")
-            pass
+            print(f"Error de login: {response.status_code} - {response.text}")
         return None
     except Exception as e:
         print(f"Error en login: {e}")
         return None
 
 def request_password_reset(email: str) -> bool:
+    """Solicita un correo de recuperación de contraseña."""
     try:
         response = requests.post(
             f"{SERVER_URL}/auth/forgot-password",
@@ -73,6 +81,7 @@ def request_password_reset(email: str) -> bool:
         return False
 
 def validate_license_online(token: str) -> bool:
+    """Valida la licencia del usuario en el servidor usando machine_id real."""
     try:
         machine_id = get_machine_id()
         response = requests.post(
@@ -87,12 +96,12 @@ def validate_license_online(token: str) -> bool:
         return False
 
 def get_user_role(token: str) -> str:
+    """Obtiene el rol del usuario desde el token JWT."""
     try:
-        # Importar aquí para evitar problemas si no se usa
         import jwt
-        SECRET_KEY = os.getenv("JWT_SECRET") # Debe estar en Render o .env
+        SECRET_KEY = os.getenv("JWT_SECRET")
         if not SECRET_KEY:
-            raise EnvironmentError("JWT_SECRET no está definida.")
+             raise EnvironmentError("JWT_SECRET no está definida.")
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         email = payload.get("sub")
         return "admin" if email == "rodrigoaguirre196@gmail.com" else "user"
@@ -101,6 +110,7 @@ def get_user_role(token: str) -> str:
         return "user"
 
 def get_all_users(token: str) -> list:
+    """Obtiene la lista de todos los usuarios (solo para admins)."""
     try:
         response = requests.get(
             f"{SERVER_URL}/admin/users",
@@ -115,7 +125,7 @@ def get_all_users(token: str) -> list:
         return []
 
 def save_refresh_token(token: str):
-    """Guarda el refresh token en un archivo local seguro."""
+    """Guarda el refresh token en un archivo local cifrado."""
     if not token:
         print("⚠️ Advertencia: Se intentó guardar un token vacío o None.")
         return
@@ -134,7 +144,7 @@ def save_refresh_token(token: str):
         print(f"❌ Error al guardar el refresh token: {e}")
 
 def load_refresh_token() -> str:
-    """Carga el refresh token desde el archivo local."""
+    """Carga el refresh token desde el archivo local y lo descifra."""
     token_path = os.path.expanduser("~/.multiverse/refresh.token")
     if os.path.exists(token_path):
         try:
@@ -149,6 +159,7 @@ def load_refresh_token() -> str:
         except InvalidToken:
             print("❌ Error: El refresh token no se pudo descifrar. Puede estar corrupto o la clave FERNET_KEY es incorrecta.")
             # Opcional: eliminar el archivo corrupto
+            # import os
             # os.remove(token_path)
         except Exception as e:
             print(f"❌ Error al cargar/descifrar el refresh token: {e}")
