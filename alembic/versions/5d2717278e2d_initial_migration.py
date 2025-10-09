@@ -1,8 +1,8 @@
-"""create users, licenses, subscriptions
+"""initial migration
 
-Revision ID: 52a1321935b4
+Revision ID: 5d2717278e2d
 Revises: 
-Create Date: 2025-10-08 12:57:12.156601
+Create Date: 2025-10-09 17:31:07.160149
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '52a1321935b4'
+revision: str = '5d2717278e2d'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -36,6 +36,7 @@ def upgrade() -> None:
     sa.Column('hashed_password', sa.String(), nullable=True),
     sa.Column('is_admin', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('mercadopago_customer_id', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_users_email'), 'users', ['email'], unique=True)
@@ -45,7 +46,7 @@ def upgrade() -> None:
     sa.Column('user_id', sa.Integer(), nullable=True),
     sa.Column('machine_id', sa.String(), nullable=True),
     sa.Column('plan', sa.String(), nullable=True),
-    sa.Column('valid_until', sa.DateTime(), nullable=True),
+    sa.Column('valid_until', sa.DateTime(timezone=True), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
