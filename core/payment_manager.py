@@ -1,6 +1,5 @@
 # core/payment_manager.py
 import mercadopago
-import requests
 import os
 from dotenv import load_dotenv
 
@@ -17,20 +16,23 @@ def create_mercadopago_payment(email: str, plan: str) -> str:
     sdk = mercadopago.SDK(access_token)
 
     payment_data = {
-        "transaction_amount": float(amount),
-        "description": f"Suscripción {plan} - Multiverse Gamer",
-        "payment_method_id": "visa",
+        "items": [{
+            "title": f"Suscripción {plan} - Multiverse Gamer",
+            "quantity": 1,
+            "unit_price": float(amount),
+            "currency_id": "ARS"
+        }],
         "payer": {"email": email},
-        "binary_mode": True,
-        # ❌ ELIMINADO: "auto_return": "approved",
         "back_urls": {
             "success": f"https://multiverse-server.onrender.com/payment/success?email={email}&plan={plan}",
             "failure": "https://multiverse-server.onrender.com/payment/failure",
             "pending": "https://multiverse-server.onrender.com/payment/pending"
-        }
+        },
+        "auto_return": "approved",  # ← Sí se permite en preference
+        "binary_mode": True
     }
 
-    result = sdk.payment().create(payment_data)
+    result = sdk.preference().create(payment_data)  # ← ¡CAMBIO CLAVE!
     if result["status"] == 201:
         return result["response"]["init_point"]
     else:
@@ -43,7 +45,6 @@ def create_paypal_payment(email: str, plan: str) -> str:
     if not client_id or not client_secret:
         raise Exception("Faltan credenciales de PayPal para producción")
 
-    # ✅ URLs de producción (sin sandbox)
     auth_url = "https://api.paypal.com/v1/oauth2/token"
     order_url = "https://api.paypal.com/v2/checkout/orders"
 
