@@ -39,7 +39,9 @@ class MultiverseMainWindow(QMainWindow):
                 "favorites": "Favoritos",
                 "graphics": "Graficos",
                 "hardware": "Hardware",
-                "view_hardware": "Ver hardware"
+                "view_hardware": "Ver hardware",
+                "logout": "Cerrar Sesion",
+                "cancel_subscription": "Cancelar Suscripcion"
             },
             "en": {
                 "app_title": "Multiverse Gamer Emulator",
@@ -58,7 +60,9 @@ class MultiverseMainWindow(QMainWindow):
                 "favorites": "Favorites",
                 "graphics": "Graphics",
                 "hardware": "Hardware",
-                "view_hardware": "View Hardware"
+                "view_hardware": "View Hardware",
+                "logout": "Logout",
+                "cancel_subscription": "Cancel Subscription"
             }
         }
         self.setWindowTitle(self.translations[self.lang]["app_title"])
@@ -102,6 +106,14 @@ class MultiverseMainWindow(QMainWindow):
         subscribe_action = QAction(self.tr("subscribe"), self)
         subscribe_action.triggered.connect(self.open_subscription)
         user_menu.addAction(subscribe_action)
+        # Botón de cancelar suscripción
+        cancel_sub_action = QAction(self.tr("cancel_subscription"), self)
+        cancel_sub_action.triggered.connect(self.cancel_subscription)
+        user_menu.addAction(cancel_sub_action)
+        # Botón de cerrar sesión
+        logout_action = QAction(self.tr("logout"), self)
+        logout_action.triggered.connect(self.logout)
+        user_menu.addAction(logout_action)
         stats_menu = menubar.addMenu(self.tr("stats"))
         stats_action = QAction(self.tr("stats"), self)
         stats_action.triggered.connect(self.open_stats)
@@ -394,3 +406,33 @@ class MultiverseMainWindow(QMainWindow):
                     print("❌ Licencia online invalida o expirada.")
             except Exception as e:
                 print(f"⚠️ Error al conectar con el servidor: {e}")
+
+    def cancel_subscription(self):
+        """Abre una ventana para cancelar la suscripción."""
+        if not self.user_token:
+            QMessageBox.warning(self, "Error", "Debes iniciar sesion primero.")
+            return
+        # Aquí necesitas implementar la lógica para obtener el ID de la suscripción activa
+        # Por ahora, asumiremos que se obtiene de la base de datos local o del servidor
+        # En una implementación real, llamarías a un endpoint del servidor
+        QMessageBox.information(self, "Cancelar Suscripcion", "Funcionalidad en desarrollo.")
+
+    def logout(self):
+        """Cierra la sesión del usuario."""
+        if self.user_token:
+            try:
+                requests.post(
+                    "https://multiverse-server.onrender.com/auth/logout",
+                    headers={"Authorization": f"Bearer {self.user_token}"},
+                    timeout=10
+                )
+            except:
+                pass  # No es crítico si falla
+        from core.online_manager import save_refresh_token
+        save_refresh_token(None)
+        self.user_token = None
+        QMessageBox.information(self, "Exito", "Sesion cerrada correctamente.")
+        self.close()
+        from ui.login_window import LoginWindow
+        login_window = LoginWindow()
+        login_window.exec_()

@@ -10,7 +10,6 @@ class User(Base):
     hashed_password = Column(String)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    mercadopago_customer_id = Column(String, nullable=True)  # ← Nuevo campo para suscripciones
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
@@ -20,6 +19,7 @@ class Subscription(Base):
     status = Column(String, default="active")
     start_date = Column(DateTime, default=datetime.utcnow)
     end_date = Column(DateTime)
+    mp_subscription_id = Column(String, unique=True, nullable=True)  # ← Nuevo campo
 
 class License(Base):
     __tablename__ = "licenses"

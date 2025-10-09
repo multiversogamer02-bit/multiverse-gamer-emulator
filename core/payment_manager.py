@@ -6,6 +6,39 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def create_mercadopago_payment(email: str, plan: str) -> str:
+    """
+    Crea un PAGO ÚNICO en Mercado Pago en modo PRODUCCIÓN.
+    """
+    access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
+    if not access_token or not access_token.startswith("APP_USR-"):
+        raise Exception("MERCADOPAGO_ACCESS_TOKEN debe ser de producción (APP_USR-...)")
+    
+    prices = {"mensual": 10000, "trimestral": 27000, "anual": 96000}
+    amount = prices.get(plan, 10000)
+
+    sdk = mercadopago.SDK(access_token)
+
+    payment_data = {
+        "transaction_amount": float(amount),
+        "description": f"Suscripción {plan} - Multiverse Gamer",
+        "payment_method_id": "visa",
+        "payer": {"email": email},
+        "binary_mode": True,
+        "back_urls": {
+            "success": f"https://multiverse-server.onrender.com/payment/success?email={email}&plan={plan}",
+            "failure": "https://multiverse-server.onrender.com/payment/failure",
+            "pending": "https://multiverse-server.onrender.com/payment/pending"
+        }
+    }
+
+    result = sdk.payment().create(payment_data)
+    if result["status"] == 201:
+        return result["response"]["init_point"]
+    else:
+        error = result.get("response", {}).get("message", "Error desconocido")
+        raise Exception(f"Error Mercado Pago: {error}")
+
 def create_mercadopago_subscription(email: str, plan: str) -> str:
     """
     Crea una SUSCRIPCIÓN RECURRENTE en Mercado Pago (no un pago único).
@@ -39,6 +72,24 @@ def create_mercadopago_subscription(email: str, plan: str) -> str:
     else:
         error = result.get("response", {}).get("message", "Error desconocido")
         raise Exception(f"Error Mercado Pago: {error}")
+
+def cancel_mercadopago_subscription(subscription_id: str) -> bool:
+    """
+    Cancela una suscripción en Mercado Pago.
+    """
+    access_token = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
+    if not access_token or not access_token.startswith("APP_USR-"):
+        raise Exception("MERCADOPAGO_ACCESS_TOKEN debe ser de producción (APP_USR-...)")
+
+    sdk = mercadopago.SDK(access_token)
+
+    # Cambia el status de la suscripción a 'cancelled'
+    subscription_data = {
+        "status": "cancelled"
+    }
+
+    result = sdk.subscription().update(subscription_id, subscription_data)
+    return result["status"] == 200
 
 def create_paypal_payment(email: str, plan: str) -> str:
     client_id = os.getenv("PAYPAL_CLIENT_ID")
