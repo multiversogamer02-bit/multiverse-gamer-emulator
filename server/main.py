@@ -20,15 +20,16 @@ def validate_env():
     missing = [var for var in required if not os.getenv(var)]
     if missing:
         raise EnvironmentError(f"❌ Variables faltantes: {', '.join(missing)}")
-    if not os.getenv("DATABASE_URL", "").startswith("postgresql"):
-        print("⚠️  DATABASE_URL no es PostgreSQL. ¿Estás en desarrollo?")
+    if not os.getenv("DATABASE_URL", "").startswith(("postgresql", "sqlite")):
+        print("⚠️  DATABASE_URL no es PostgreSQL ni SQLite. ¿Estás en desarrollo?")
 validate_env()
 
 app = FastAPI(title="Multiverse Gamer API")
 
 models.Base.metadata.create_all(bind=database.engine)
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+# 👇 SECRET_KEY se obtiene de variable de entorno (validada arriba)
+SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 30
@@ -131,7 +132,7 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     return {"msg": "Usuario creado"}
 
 @app.post("/token")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_ OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
@@ -311,7 +312,7 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "is_admin": u.is_admin
     } for u in users]
 
-# 👇 WEBHOOK DE MERCADO PAGO (solo marca pago aprobado)
+# 👇 WEBHOOK DE MERCADOPAGO (solo marca pago aprobado)
 @app.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("x-signature")
