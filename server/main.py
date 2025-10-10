@@ -86,8 +86,7 @@ def create_access_token( dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_refresh_token( dict):
     to_encode = data.copy()
@@ -133,7 +132,7 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     return {"msg": "Usuario creado"}
 
 @app.post("/token")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_ OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
@@ -232,6 +231,41 @@ def activate_license(
     db.add(new_license)
     db.commit()
     return {"status": "activated", "expires": new_license.valid_until.isoformat()}
+
+# 👇 NUEVO: cancelar suscripción
+@app.post("/subscription/cancel")
+def cancel_subscription(
+    subscription_id: str = Form(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Verificar que la suscripción pertenece al usuario
+    subscription = db.query(models.Subscription).filter(
+        models.Subscription.id == subscription_id,
+        models.Subscription.user_id == current_user.id
+    ).first()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Suscripción no encontrada")
+
+    try:
+        from core.payment_manager import cancel_mercadopago_subscription
+        success = cancel_mercadopago_subscription(subscription_id)
+        if success:
+            # Actualizar estado local
+            subscription.status = "cancelled"
+            db.commit()
+            return {"status": "cancelled"}
+        else:
+            raise HTTPException(status_code=500, detail="No se pudo cancelar en Mercado Pago")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error cancelando: {str(e)}")
+
+# 👇 NUEVO: cerrar sesión
+@app.post("/auth/logout")
+def logout():
+    # FastAPI no tiene sesión en el sentido tradicional, pero puedes invalidar el token
+    # En tu cliente, simplemente borra el token local
+    return {"msg": "Sesión cerrada"}
 
 # 👇 ELIMINADO: ya no se crea licencia aquí
 @app.get("/payment/success")
