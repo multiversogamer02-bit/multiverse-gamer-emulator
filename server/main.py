@@ -26,7 +26,8 @@ validate_env()
 
 app = FastAPI(title="Multiverse Gamer API")
 
-models.Base.metadata.create_all(bind=database.engine)
+# ❌ ELIMINADO: models.Base.metadata.create_all(bind=database.engine)
+# 👆 Alembic se encargará de crear las tablas.
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
@@ -81,7 +82,7 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
-# ✅ CORREGIDO: función ahora acepta parámetro nombrado
+# ✅ CORREGIDO: función ahora acepta parámetro nombrado 'data'
 def create_access_token( dict):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -136,7 +137,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    access_token = create_access_token(data={"sub": user.email})  # ✅ Ahora funciona
+    access_token = create_access_token(data={"sub": user.email})
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
@@ -152,7 +153,7 @@ def refresh_token(refresh_token: str = Form(...), db: Session = Depends(get_db))
         user = get_user(db, email)
         if not user:
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
-        new_access_token = create_access_token(data={"sub": email})  # ✅ Ahora funciona
+        new_access_token = create_access_token(data={"sub": email})
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
         raise HTTPException(status_code=401, detail="Token expirado o inválido")
@@ -231,41 +232,6 @@ def activate_license(
     db.add(new_license)
     db.commit()
     return {"status": "activated", "expires": new_license.valid_until.isoformat()}
-
-# 👇 NUEVO: cancelar suscripción
-@app.post("/subscription/cancel")
-def cancel_subscription(
-    subscription_id: str = Form(...),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    # Verificar que la suscripción pertenece al usuario
-    subscription = db.query(models.Subscription).filter(
-        models.Subscription.id == subscription_id,
-        models.Subscription.user_id == current_user.id
-    ).first()
-    if not subscription:
-        raise HTTPException(status_code=404, detail="Suscripción no encontrada")
-
-    try:
-        from core.payment_manager import cancel_mercadopago_subscription
-        success = cancel_mercadopago_subscription(subscription_id)
-        if success:
-            # Actualizar estado local
-            subscription.status = "cancelled"
-            db.commit()
-            return {"status": "cancelled"}
-        else:
-            raise HTTPException(status_code=500, detail="No se pudo cancelar en Mercado Pago")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error cancelando: {str(e)}")
-
-# 👇 NUEVO: cerrar sesión
-@app.post("/auth/logout")
-def logout():
-    # FastAPI no tiene sesión en el sentido tradicional, pero puedes invalidar el token
-    # En tu cliente, simplemente borra el token local
-    return {"msg": "Sesión cerrada"}
 
 # 👇 ELIMINADO: ya no se crea licencia aquí
 @app.get("/payment/success")
