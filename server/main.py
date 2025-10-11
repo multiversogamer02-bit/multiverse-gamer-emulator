@@ -26,8 +26,7 @@ validate_env()
 
 app = FastAPI(title="Multiverse Gamer API")
 
-# ❌ ELIMINADO: models.Base.metadata.create_all(bind=database.engine)
-# 👆 Alembic se encargará de crear las tablas.
+models.Base.metadata.create_all(bind=database.engine)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
@@ -82,24 +81,12 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
-# ✅ DEFINICIÓN CORRECTA
+# ✅ CORREGIDO: función ahora acepta parámetro nombrado 'data'
 def create_access_token( dict):
-    print(f"[DIAGNOSTICO] create_access_token recibió: {data}") # <-- Línea de diagnóstico
-    to_encode = data.copy()
-    """
-    Crea un token JWT.
-
-    Args:
-        data: Diccionario con los datos a codificar en el token.
-
-    Returns:
-        str: El token JWT codificado.
-    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def create_refresh_token( dict):
     to_encode = data.copy()
@@ -144,20 +131,13 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     db.commit()
     return {"msg": "Usuario creado"}
 
+# ✅ CORREGIDO: definición de función
 @app.post("/token")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    print("[DIAGNOSTICO] Llamando a login - INICIO")  # <-- Línea de diagnóstico
-    
+def login(form_ OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    
-    print(f"[DIAGNOSTICO] Usuario autenticado: {user.email}") # <-- Línea de diagnóstico
-    print("[DIAGNOSTICO] Llamando a create_access_token con data=...") # <-- Línea de diagnóstico
-    
-    access_token = create_access_token(data={"sub": user.email})  # <-- Línea 140
-    
-    print("[DIAGNOSTICO] Token creado exitosamente") # <-- Línea de diagnóstico
+    access_token = create_access_token(data={"sub": user.email})  # ✅ Ahora funciona
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
@@ -173,7 +153,7 @@ def refresh_token(refresh_token: str = Form(...), db: Session = Depends(get_db))
         user = get_user(db, email)
         if not user:
             raise HTTPException(status_code=401, detail="Usuario no encontrado")
-        new_access_token = create_access_token(data={"sub": email})
+        new_access_token = create_access_token(data={"sub": email})  # ✅ Ahora funciona
         return {"access_token": new_access_token, "token_type": "bearer"}
     except JWTError:
         raise HTTPException(status_code=401, detail="Token expirado o inválido")
@@ -253,6 +233,41 @@ def activate_license(
     db.commit()
     return {"status": "activated", "expires": new_license.valid_until.isoformat()}
 
+# 👇 NUEVO: cancelar suscripción
+@app.post("/subscription/cancel")
+def cancel_subscription(
+    subscription_id: str = Form(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Verificar que la suscripción pertenece al usuario
+    subscription = db.query(models.Subscription).filter(
+        models.Subscription.id == subscription_id,
+        models.Subscription.user_id == current_user.id
+    ).first()
+    if not subscription:
+        raise HTTPException(status_code=404, detail="Suscripción no encontrada")
+
+    try:
+        from core.payment_manager import cancel_mercadopago_subscription
+        success = cancel_mercadopago_subscription(subscription_id)
+        if success:
+            # Actualizar estado local
+            subscription.status = "cancelled"
+            db.commit()
+            return {"status": "cancelled"}
+        else:
+            raise HTTPException(status_code=500, detail="No se pudo cancelar en Mercado Pago")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error cancelando: {str(e)}")
+
+# 👇 NUEVO: cerrar sesión
+@app.post("/auth/logout")
+def logout():
+    # FastAPI no tiene sesión en el sentido tradicional, pero puedes invalidar el token
+    # En tu cliente, simplemente borra el token local
+    return {"msg": "Sesión cerrada"}
+
 # 👇 ELIMINADO: ya no se crea licencia aquí
 @app.get("/payment/success")
 def payment_success(email: str, plan: str, db: Session = Depends(get_db)):
@@ -298,7 +313,7 @@ def get_all_users(current_user: models.User = Depends(get_current_user), db: Ses
         "is_admin": u.is_admin
     } for u in users]
 
-# 👇 WEBHOOK DE MERCADOPAGO (solo marca pago aprobado)
+# 👇 WEBHOOK DE MERCADOPAGO PARA SUSCRIPCIONES (solo marca pago aprobado)
 @app.post("/webhooks/mercadopago")
 async def mercadopago_webhook(request: Request, db: Session = Depends(get_db)):
     signature = request.headers.get("x-signature")
