@@ -145,7 +145,7 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     return {"msg": "Usuario creado"}
 
 @app.post("/token")
-def login(form_ OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     print("[DIAGNOSTICO] Llamando a login - INICIO")  # <-- Línea de diagnóstico
     
     user = authenticate_user(db, form_data.username, form_data.password)
