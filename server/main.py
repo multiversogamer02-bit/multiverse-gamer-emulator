@@ -84,6 +84,8 @@ def authenticate_user(db: Session, email: str, password: str):
 
 # ✅ DEFINICIÓN CORRECTA
 def create_access_token( dict):
+    print(f"[DIAGNOSTICO] create_access_token recibió: {data}") # <-- Línea de diagnóstico
+    to_encode = data.copy()
     """
     Crea un token JWT.
 
@@ -143,11 +145,19 @@ def register(email: str = Form(...), password: str = Form(...), db: Session = De
     return {"msg": "Usuario creado"}
 
 @app.post("/token")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(form_ OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    print("[DIAGNOSTICO] Llamando a login - INICIO")  # <-- Línea de diagnóstico
+    
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    access_token = create_access_token(data={"sub": user.email})  # ✅ Ahora funciona
+    
+    print(f"[DIAGNOSTICO] Usuario autenticado: {user.email}") # <-- Línea de diagnóstico
+    print("[DIAGNOSTICO] Llamando a create_access_token con data=...") # <-- Línea de diagnóstico
+    
+    access_token = create_access_token(data={"sub": user.email})  # <-- Línea 140
+    
+    print("[DIAGNOSTICO] Token creado exitosamente") # <-- Línea de diagnóstico
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
