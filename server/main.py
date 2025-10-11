@@ -82,12 +82,22 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
-# ✅ CORREGIDO: función ahora acepta parámetro nombrado 'data'
+# ✅ DEFINICIÓN CORRECTA
 def create_access_token( dict):
+    """
+    Crea un token JWT.
+
+    Args:
+        data: Diccionario con los datos a codificar en el token.
+
+    Returns:
+        str: El token JWT codificado.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 def create_refresh_token( dict):
     to_encode = data.copy()
@@ -137,7 +147,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={"sub": user.email})  # ✅ Ahora funciona
     refresh_token = create_refresh_token(data={"sub": user.email})
     return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
 
