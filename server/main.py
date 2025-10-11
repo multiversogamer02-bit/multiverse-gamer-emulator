@@ -81,12 +81,22 @@ def authenticate_user(db: Session, email: str, password: str):
         return False
     return user
 
-# ✅ CORREGIDO: función ahora acepta parámetro nombrado 'data'
+# ✅ DEFINICIÓN CORRECTA
 def create_access_token( dict):
+    """
+    Crea un token JWT.
+
+    Args:
+         Diccionario con los datos a codificar en el token.
+
+    Returns:
+        str: El token JWT codificado.
+    """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
 def create_refresh_token( dict):
     to_encode = data.copy()
